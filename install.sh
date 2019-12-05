@@ -18,15 +18,12 @@ S3_BUCKET_URL="https://gravity-bundles.s3.eu-central-1.amazonaws.com"
 # Gravity options
 K8S_BASE_NAME="anv-base-k8s"
 K8S_BASE_VERSION="1.0.13"
-K8S_BASE_REPO_VERSION="${K8S_BASE_VERSION}"
 
 K8S_INFRA_NAME="k8s-infra"
 K8S_INFRA_VERSION="1.0.11"
-K8S_INFRA_REPO_VERSION="${K8S_INFRA_VERSION}"
 
 PRODUCT_NAME="bettertomorrow"
 PRODUCT_VERSION="1.24.0-30"
-PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
 
 # NVIDIA driver options
 NVIDIA_DRIVER_METHOD="container"
@@ -154,6 +151,7 @@ while test $# -gt 0; do
         shift
             K8S_BASE_VERSION=${1:-$K8S_BASE_VERSION}
         shift
+        K8S_BASE_REPO_VERSION="${K8S_BASE_VERSION}"
         continue
         ;;
         --skip-k8s-base)
@@ -165,6 +163,7 @@ while test $# -gt 0; do
         shift
             K8S_INFRA_VERSION=${1:-$K8S_INFRA_VERSION}
         shift
+        K8S_INFRA_REPO_VERSION="${K8S_INFRA_VERSION}"
         continue
         ;;
         --skip-k8s-infra)
@@ -182,6 +181,7 @@ while test $# -gt 0; do
         shift
             PRODUCT_VERSION=${1:-$PRODUCT_VERSION}
         shift
+        PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
         continue
         ;;
         --auto-install-product)
