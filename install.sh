@@ -23,7 +23,7 @@ K8S_INFRA_NAME="k8s-infra"
 K8S_INFRA_VERSION="1.0.11"
 
 PRODUCT_NAME="bettertomorrow-trtis"
-PRODUCT_VERSION="1.24.0-rc.5"
+PRODUCT_VERSION="1.24.0-rc.6"
 
 # NVIDIA driver options
 NVIDIA_DRIVER_METHOD="container"
