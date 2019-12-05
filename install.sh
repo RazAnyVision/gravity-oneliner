@@ -49,6 +49,7 @@ SKIP_PRODUCT="false"
 SKIP_DRIVERS="false"
 SKIP_MD5_CHECK="false"
 DOWNLOAD_ONLY="false"
+FORCE_DOWNLOAD="false"
 SKIP_CLUSTER_CHECK="false"
 MIGRATION_EXIST="false"
 
@@ -84,6 +85,7 @@ function showhelp {
    echo "  [-p|--product-name] Product name to install"
    echo "  [-v|--product-version] Product version to install [Default: ${PRODUCT_VERSION}]"
    echo "  [--download-only] Download all the installation files to the same location as this script"
+   echo "  [--force-download] Allow overwrite scripts if exist"
    echo "  [--os-package] Select OS package to download, Force download only [redhat|ubuntu] (default: machine OS)"
    echo "  [--download-dashboard] Skip the installation of K8S infra charts layer"
    echo "  [--base-url] Base URL for downloading the installation files [Default: https://gravity-bundles.s3.eu-central-1.amazonaws.com]"
@@ -124,6 +126,11 @@ while test $# -gt 0; do
         ;;
         --download-only)
             DOWNLOAD_ONLY="true"
+        shift
+        continue
+        ;;
+        --force-download)
+            FORCE_DOWNLOAD="true"
         shift
         continue
         ;;
@@ -419,8 +426,10 @@ function download_files() {
     PACKAGES+=("${DASHBOARD_URL}")
   fi
 
-  # remove old script if exist before download
-  rm -f ${BASEDIR}/${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL##*/} ${BASEDIR}/${SCRIPT_URL##*/} 
+  # remove old scripts if exist before download
+  if [ ${FORCE_DOWNLOAD} == "true" ]; then
+    rm -f ${BASEDIR}/${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL##*/} ${BASEDIR}/${SCRIPT_URL##*/} 
+  fi
   
   # remove old md5 files
   for url in "${PACKAGES[@]}"; do
