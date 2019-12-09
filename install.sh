@@ -3,7 +3,7 @@ set -e
 set -o pipefail
 
 # script version
-SCRIPT_VERSION="1.24.0-27"
+SCRIPT_VERSION="1.24.0-32"
 
 # Absolute path to this script
 SCRIPT=$(readlink -f "$0")
@@ -95,8 +95,9 @@ function showhelp {
    echo "  [--add-migration-chart] Install also the migration chart"
    echo "  [--k8s-base-version] K8S base image version [Default: ${K8S_BASE_VERSION}]"
    echo "  [--k8s-infra-version] K8S infra image [Default:${K8S_INFRA_VERSION}]"
-   echo "  [--pod-network-cidr] Config pod network CIDR [Default: ${POD_NETWORK_CIDR}]"
-   echo "  [--service-cidr] Config service CIDR [Default: ${SERVICE_CIDR}]"
+   # commented below - feature disabled until we can send those params to the preflight.sh script as well
+   #echo "  [--pod-network-cidr] Config pod network CIDR [Default: ${POD_NETWORK_CIDR}]"
+   #echo "  [--service-cidr] Config service CIDR [Default: ${SERVICE_CIDR}]"
    echo "  [--driver-method] NVIDIA driver installation method [host, container. Default: ${NVIDIA_DRIVER_METHOD}]"
    echo "  [--driver-version] NVIDIA driver version (requires --driver-method=container) [410-104, 418-113. Default: ${NVIDIA_DRIVER_VERSION}]"   
    echo "  [--skip-cluster-check] Skip cluster checks (preflight) if the cluster is already installed"
@@ -251,18 +252,20 @@ while test $# -gt 0; do
             DOWNLOAD_ONLY="true"
         continue
         ;;
-        --pod-network-cidr)
-        shift
-            POD_NETWORK_CIDR=${1:-$POD_NETWORK_CIDR}
-        shift
-        continue
-        ;;
-        --service-cidr)
-        shift
-            SERVICE_CIDR=${1:-$SERVICE_CIDR}
-        shift
-        continue
-        ;;
+        # commented below - feature disabled until we can send those params to the preflight.sh script as well
+        
+        #--pod-network-cidr)
+        #shift
+        #    POD_NETWORK_CIDR=${1:-$POD_NETWORK_CIDR}
+        #shift
+        #continue
+        #;;
+        #--service-cidr)
+        #shift
+        #    SERVICE_CIDR=${1:-$SERVICE_CIDR}
+        #shift
+        #continue
+        #;;
     esac
     break
 done
@@ -324,19 +327,37 @@ function cidr_overlap() (
 )
 
 function cidr_check() {
+  # This function:
+  # checks if "DOWNLOAD_ONLY=true" is so returns normally
+  # checks if there is CIDR overlap with local network
+  # if there is an overlap it prints the details and terminates install script befor making changes
+
+  if [[ "$DOWNLOAD_ONLY" == "true" ]]; then
+    echo "Run with --download-only -> CIDR overlap check skipped!"
+    return 0
+  fi
+  # evaluates the list of subnets using the "ip route" command and comparing each subnet to CIDR in use
   CIDR_LIST=$(ip route | cut -d' ' -f1)
-  # This function cheks if there is CIDR overlap with local network and terminates install if true
-  # echo ${CIDR_LIST}
   for network in $CIDR_LIST; do
     if [[ $network != "default" ]]; then
-        if [[ $( cidr_overlap ${POD_NETWORK_CIDR} ${network}) ]]; then
+        # solve issue when mask is /32 and does not show in the ip route correctly
+        IFS=/ read ip mask <<<"$network"
+        if [[ ${mask} ]];then echo "OK"
+          else
+            network="$network/24"
+            echo $network
+        fi
+        # calling function cidr_overlap to evaluate
+        if [[ $( cidr_overlap ${POD_NETWORK_CIDR} ${network} ) ]]; then
           echo "Pods network CIDR Exist in network environment!!! Install terminated - nothing was done."
-          echo "To run with custom CIDR use --pod-network-cidr"
+          cidr_overlap ${POD_NETWORK_CIDR} ${network}
+          #echo "To run with custom CIDR use --pod-network-cidr"
           exit 1
         fi
-        if [[ $( cidr_overlap ${SERVICE_CIDR} ${network}) ]]; then
+        if [[ $( cidr_overlap ${SERVICE_CIDR} ${network} ) ]]; then
           echo "Service CIDR Exist in network environment!!! Install terminated - nothing was done."
-          echo "To run with custom CIDR use --service-cidr"
+          cidr_overlap ${SERVICE_CIDR} ${network}
+          #echo "To run with custom CIDR use --service-cidr"
           exit 1
         fi
     fi
@@ -788,6 +809,7 @@ function restore_sw_filer_data() {
 }
 
 echo "Installing ${NODE_ROLE} node with method ${INSTALL_METHOD}" | tee -a ${LOG_FILE}
+
 
 if [[ "${INSTALL_METHOD}" == "online" ]]; then
   online_packages_installation
