@@ -218,24 +218,29 @@ function disable_docker {
     echo "######################################"
     systemctl stop docker
     systemctl is-enabled --quiet docker && echo "#### Disabling Docker service..." && systemctl disable docker
-    if [ -x "$(command -v apt)" ]; then
-      apt remove -y --purge 'docker*' 'container*'
-      apt autoremove -y
-    elif [ -x "$(command -v yum)" ]; then
-      yum remove -y 'docker*' 'container*'
-      yum autoremove -y
-    fi
-    if [ -d "/var/lib/docker" ]; then
-      rm -rf /var/lib/docker
-    fi
-    if [ -f /usr/local/bin/docker-compose ]; then
-      echo "######################################"
-      echo "# Removing docker-compose. . .       #"
-      echo "######################################"
-      rm -f /usr/local/bin/docker-compose
-    fi
+    purge_docker
   else
     echo "#### docker does not exists or is disabled, skipping docker service disabling phase."
+  fi
+}
+
+
+function purge_docker {
+  if [ -x "$(command -v apt)" ]; then
+    apt remove -y --purge 'docker*' 'container*'
+    apt autoremove -y
+  elif [ -x "$(command -v yum)" ]; then
+    yum remove -y 'docker*' 'container*'
+    yum autoremove -y
+  fi
+  if [ -d "/var/lib/docker" ]; then
+    rm -rf /var/lib/docker
+  fi
+  if [ -f /usr/local/bin/docker-compose ]; then
+    echo "######################################"
+    echo "# Removing docker-compose. . .       #"
+    echo "######################################"
+    rm -f /usr/local/bin/docker-compose
   fi
 }
 
