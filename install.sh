@@ -14,6 +14,7 @@ NODE_ROLE="aio"
 INSTALL_METHOD="online"
 LOG_FILE="/var/log/gravity-installer.log"
 S3_BUCKET_URL="https://gravity-bundles.s3.eu-central-1.amazonaws.com"
+INSTALL_RANCHER="true"
 
 # Gravity options
 K8S_BASE_NAME="anv-base-k8s"
@@ -107,6 +108,7 @@ function showhelp {
    echo "  [--skip-k8s-infra] Skip infrastructure layer installation"
    echo "  [--skip-drivers] Skip Nvidia drivers installation"
    echo "  [--skip-product] Skip product/application installation"
+   echo "  [--skip-rancher] Skip Rancher installation"
    echo "  [--developer] Developer mode"
    echo ""
 }
@@ -204,6 +206,11 @@ while test $# -gt 0; do
         ;;
         --skip-md5-check)
             SKIP_MD5_CHECK="true"
+        shift
+        continue
+        ;;
+        --skip-rancher)
+            INSTALL_RANCHER="false"
         shift
         continue
         ;;
@@ -694,7 +701,7 @@ function install_k8s_infra_app() {
   echo "=====================================================================" | tee -a ${LOG_FILE}
   echo "" | tee -a ${LOG_FILE}
   if [[ "${SKIP_K8S_INFRA}" == "false" ]] && [[ -f "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" ]]; then
-    install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher=true
+    install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher="${INSTALL_RANCHER}"
   else
     echo "### Skipping installing infra charts .." | tee -a ${LOG_FILE}
   fi
