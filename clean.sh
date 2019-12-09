@@ -218,7 +218,6 @@ function disable_docker {
     echo "######################################"
     systemctl stop docker
     systemctl is-enabled --quiet docker && echo "#### Disabling Docker service..." && systemctl disable docker
-    purge_docker
   else
     echo "#### docker does not exists or is disabled, skipping docker service disabling phase."
   fi
@@ -257,8 +256,9 @@ while test $# -gt 0; do
         backup_pv_id
         backup_consul_data
         disable_k8s
-        remove_nvidia_docker
         disable_docker       
+        remove_nvidia_docker
+        purge_docker
         remove_nvidia_drivers
         shift
         continue
@@ -286,6 +286,7 @@ while test $# -gt 0; do
         ;;
         -d|--remove-docker)
         disable_docker
+        purge_docker
         shift
         continue
         #exit 0
