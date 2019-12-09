@@ -58,12 +58,12 @@ if [ -n "${PACKAGE_CONTENT}" ]; then
      gravity ops connect --insecure https://localhost:3009 admin Passw0rd123 | tee -a ${IMPORT_LOG_FILE}
      printf "#### Pushing ${APP_STRING} to Gravity Ops Center ...\n" | tee -a ${IMPORT_LOG_FILE}
      gravity app import --force --insecure --ops-url=https://localhost:3009 ${PACKAGE} | tee -a ${IMPORT_LOG_FILE}
-     printf "#### Exporting ${APP_STRING} to local Docker registry ...\n" | tee -a ${IMPORT_LOG_FILE}
+     printf "#### Exporting ${APP_STRING} to gravity Docker registry ...\n" | tee -a ${IMPORT_LOG_FILE}
      gravity exec gravity app export --insecure --ops-url=https://localhost:3009 ${APP_STRING}
   fi 
 
-  printf "#### Executing ${APP_STRING} install hook ...\n" | tee -a ${IMPORT_LOG_FILE}
-  gravity exec gravity app pull --insecure --ops-url=https://localhost:3009 $@ ${APP_STRING} | tee -a ${IMPORT_LOG_FILE}
+  printf "#### Executing ${APP_STRING} install pull ...\n" | tee -a ${IMPORT_LOG_FILE}
+  gravity exec gravity app pull --insecure --ops-url=https://localhost:3009 ${APP_STRING} | tee -a ${IMPORT_LOG_FILE}
 
   printf "#### Executing ${APP_STRING} install hook ...\n" | tee -a ${INSTALL_LOG_FILE}
   gravity exec gravity app hook $@ ${APP_STRING} install | tee -a ${INSTALL_LOG_FILE}
