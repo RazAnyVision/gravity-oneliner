@@ -58,6 +58,7 @@ MIGRATION_EXIST="false"
 # Network options
 POD_NETWORK_CIDR="10.244.0.0/16"
 SERVICE_CIDR="10.172.0.0/16"
+SKIP_CIDR="false"
 
 echo "------ Staring Gravity installer $(date '+%Y-%m-%d %H:%M:%S')  ------" >${LOG_FILE} 2>&1
 
@@ -102,6 +103,7 @@ function showhelp {
    echo "  [--k8s-base-repo-version] Kubernetes/Gravity repo version (default: ${K8S_BASE_VERSION})"
    echo "  [--k8s-infra-version] Infrastructure layer version (default: ${K8S_INFRA_VERSION})"
    echo "  [--k8s-infra-repo-version] Infrastructure repo version (default: ${K8S_INFRA_VERSION})"
+   echo "  [--skip-cidr-check] Force install without checking CIDR overlap"
    # commented below - feature disabled until we can send those params to the preflight.sh script as well
    # echo "  [--pod-network-cidr] Config pod network CIDR [Default: ${POD_NETWORK_CIDR}]"
    # echo "  [--service-cidr] Config service CIDR [Default: ${SERVICE_CIDR}]"
@@ -291,6 +293,11 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --skip-cidr-check)
+            SKIP_CIDR="true"
+        shift
+        continue
+        ;;
         # commented below - feature disabled until we can send those params to the preflight.sh script as well
         #--pod-network-cidr)
         #shift
@@ -378,6 +385,10 @@ function cidr_check() {
 
   if [[ "$DOWNLOAD_ONLY" == "true" ]]; then
     echo "Run with --download-only -> CIDR overlap check skipped!"
+    return 0
+  fi
+  if [[ "$SKIP_CIDR" == "true" ]]; then
+    echo "Run with --skip-cidr-check -> CIDR overlap check skipped!"
     return 0
   fi
   # evaluates the list of subnets using the "ip route" command and comparing each subnet to CIDR in use
