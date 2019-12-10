@@ -56,6 +56,11 @@ FORCE_DOWNLOAD="false"
 SKIP_CLUSTER_CHECK="false"
 MIGRATION_EXIST="false"
 
+# Network options
+POD_NETWORK_CIDR="10.244.0.0/16"
+SERVICE_CIDR="10.172.0.0/16"
+SKIP_CIDR="false"
+
 echo "------ Staring Gravity installer $(date '+%Y-%m-%d %H:%M:%S')  ------" >${LOG_FILE} 2>&1
 
 ## Permissions check
