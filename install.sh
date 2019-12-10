@@ -3,7 +3,7 @@ set -e
 set -o pipefail
 
 # script version
-SCRIPT_VERSION="1.24.0-32"
+SCRIPT_VERSION="1.24.0-35"
 
 # Absolute path to this script
 SCRIPT=$(readlink -f "$0")
@@ -14,7 +14,6 @@ NODE_ROLE="aio"
 INSTALL_METHOD="online"
 LOG_FILE="/var/log/gravity-installer.log"
 S3_BUCKET_URL="https://gravity-bundles.s3.eu-central-1.amazonaws.com"
-INSTALL_RANCHER="true"
 
 # Gravity options
 K8S_BASE_NAME="anv-base-k8s"
@@ -26,7 +25,7 @@ K8S_INFRA_VERSION="1.0.11"
 K8S_INFRA_REPO_VERSION="${K8S_INFRA_VERSION}"
 
 PRODUCT_NAME="bettertomorrow"
-PRODUCT_VERSION="1.24.0-31"
+PRODUCT_VERSION="1.24.0-35"
 PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
 
 # NVIDIA driver options
@@ -91,33 +90,27 @@ function showhelp {
    echo "  [-m|--install-method] Installation method [online|airgap] (default: online)"
    echo "  [-p|--product-name] Product name to install"
    echo "  [-v|--product-version] Product version to install (default: ${PRODUCT_VERSION})"
-   echo "  [--product-repo-version] Product repo version to install (default: ${PRODUCT_VERSION})"
    echo "  [--download-only] Download all the required installation files (to ${BASEDIR})"
    echo "  [--force-download] Allow overwrite scripts if exist"
    echo "  [--os-package] Select OS package to download, Force download only [redhat|ubuntu] (default: machine OS)"
    echo "  [--download-dashboard] Download product dashboard (to ${BASEDIR})"
-   echo "  [--auto-install-product] Auto deploy application after installation (from Rancher catalog)"
-   echo "  [--add-migration-chart] Auto deploy migration after installation (from Rancher catalog)"   
    echo "  [--base-url] Base URL for downloading the installation files (default: https://gravity-bundles.s3.eu-central-1.amazonaws.com)"
+   echo "  [--auto-install-product] Auto deploy application after installation (from Rancher catalog)"
+   echo "  [--add-migration-chart] Auto deploy migration after installation (from Rancher catalog)"
    echo "  [--k8s-base-version] Kubernetes/Gravity base version (default: ${K8S_BASE_VERSION})"
-   echo "  [--k8s-base-repo-version] Kubernetes/Gravity repo version (default: ${K8S_BASE_VERSION})"
    echo "  [--k8s-infra-version] Infrastructure layer version (default: ${K8S_INFRA_VERSION})"
-   echo "  [--k8s-infra-repo-version] Infrastructure repo version (default: ${K8S_INFRA_VERSION})"
    echo "  [--skip-cidr-check] Force install without checking CIDR overlap"
    # commented below - feature disabled until we can send those params to the preflight.sh script as well
    # echo "  [--pod-network-cidr] Config pod network CIDR [Default: ${POD_NETWORK_CIDR}]"
    # echo "  [--service-cidr] Config service CIDR [Default: ${SERVICE_CIDR}]"
    echo "  [--driver-method] Nvidia driver installation method [host|container] (default: ${NVIDIA_DRIVER_METHOD})"
    echo "  [--driver-version] Nvidia driver version (requires --driver-method=container) [410-104|418-113] (default: ${NVIDIA_DRIVER_VERSION})"
-   echo "  [--driver-package-version] Nvidia driver package version (default: ${NVIDIA_DRIVER_PACKAGE_VERSION})"
-   echo "  [--driver-repo-version] Nvidia driver repo version (default: ${NVIDIA_DRIVER_PACKAGE_VERSION})"
    echo "  [--skip-cluster-check] Skip existing cluster check"
    echo "  [--skip-md5-check] Skip MD5 checksum"
    echo "  [--skip-k8s-base] Skip Kubernetes/Gravity base installation"
    echo "  [--skip-k8s-infra] Skip infrastructure layer installation"
    echo "  [--skip-drivers] Skip Nvidia drivers installation"
    echo "  [--skip-product] Skip product/application installation"
-   echo "  [--skip-rancher] Skip Rancher installation"
    echo "  [--developer] Developer mode"
    echo ""
 }
@@ -183,7 +176,6 @@ while test $# -gt 0; do
         shift
             K8S_INFRA_VERSION=${1:-$K8S_INFRA_VERSION}
         shift
-        
         continue
         ;;
         --skip-k8s-infra)
@@ -218,11 +210,6 @@ while test $# -gt 0; do
         shift
         continue
         ;;
-        --skip-rancher)
-            INSTALL_RANCHER="false"
-        shift
-        continue
-        ;;
         --add-migration-chart)
             MIGRATION_EXIST="true"
         shift
@@ -245,37 +232,27 @@ while test $# -gt 0; do
         shift
         continue
         ;;
-        --driver-package-version)
-        shift
-            NVIDIA_DRIVER_PACKAGE_VERSION=${1:-$NVIDIA_DRIVER_PACKAGE_VERSION}
-        shift
-        continue
-        ;;
         --k8s-base-repo-version)
         shift
             K8S_BASE_REPO_VERSION=${1:-$K8S_BASE_REPO_VERSION}
-            K8S_BASE_REPO_FLAG="true"
         shift
         continue
         ;;
         --k8s-infra-repo-version)
         shift
             K8S_INFRA_REPO_VERSION=${1:-$K8S_INFRA_REPO_VERSION}
-            K8S_INFRA_REPO_FLAG="true"
         shift
         continue
         ;;
         --product-repo-version)
         shift
             PRODUCT_REPO_VERSION=${1:-$PRODUCT_REPO_VERSION}
-            PRODUCT_REPO_FLAG="true"
         shift
         continue
         ;;
-        --driver-repo-version)
+        --nvidia-driver-repo-version)
         shift
             NVIDIA_DRIVER_REPO_VERSION=${1:-$NVIDIA_DRIVER_REPO_VERSION}
-            NVIDIA_DRIVER_REPO_FLAG="true"
         shift
         continue
         ;;
@@ -314,12 +291,6 @@ while test $# -gt 0; do
     esac
     break
 done
-
-# change repo version in case repo version flag exist
-[ -z ${K8S_BASE_REPO_FLAG} ] && K8S_BASE_REPO_VERSION="${K8S_BASE_VERSION}"
-[ -z ${K8S_INFRA_REPO_FLAG} ] && K8S_INFRA_REPO_VERSION="${K8S_INFRA_VERSION}"
-[ -z ${PRODUCT_REPO_FLAG} ] && PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
-[ -z ${NVIDIA_DRIVER_REPO_FLAG} ] && NVIDIA_DRIVER_REPO_VERSION="${NVIDIA_DRIVER_PACKAGE_VERSION}"
 
 # evaluate variables after providing script arguments
 PRODUCT_MIGRATION_NAME="migration-workflow-${PRODUCT_NAME}"
@@ -580,9 +551,9 @@ function download_files() {
 
   # remove old scripts if exist before download
   if [ ${FORCE_DOWNLOAD} == "true" ]; then
-    rm -f ${BASEDIR}/${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL##*/} ${BASEDIR}/${SCRIPT_URL##*/} 
+    rm -f ${BASEDIR}/${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL##*/} ${BASEDIR}/${SCRIPT_URL##*/}
   fi
-  
+
   # remove old md5 files
   for url in "${PACKAGES[@]}"; do
     filename=$(echo "${url##*/}")
@@ -815,7 +786,7 @@ function install_k8s_infra_app() {
   echo "=====================================================================" | tee -a ${LOG_FILE}
   echo "" | tee -a ${LOG_FILE}
   if [[ "${SKIP_K8S_INFRA}" == "false" ]] && [[ -f "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" ]]; then
-    install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher="${INSTALL_RANCHER}"
+    install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher=true
   else
     echo "### Skipping installing infra charts .." | tee -a ${LOG_FILE}
   fi
@@ -901,7 +872,7 @@ function developer_env_install() {
   fi
   echo "" | tee -a ${LOG_FILE}
   echo "Installing Tilt..." | tee -a ${LOG_FILE}
-  curl -fsSL https://raw.githubusercontent.com/windmilleng/tilt/master/scripts/install.sh | bash 
+  curl -fsSL https://raw.githubusercontent.com/windmilleng/tilt/master/scripts/install.sh | bash
   echo "" | tee -a ${LOG_FILE}
   #echo "Cloning tilt git repo to /tmp/tilt" | tee -a ${LOG_FILE}
   #git clone git@github.com:AnyVisionltd/tilt.git /tmp/tilt >>${LOG_FILE} 2>&1
