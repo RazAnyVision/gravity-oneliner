@@ -3,7 +3,7 @@ set -e
 set -o pipefail
 
 # script version
-SCRIPT_VERSION="1.24.0-35"
+SCRIPT_VERSION="1.24.0-36"
 
 # Absolute path to this script
 SCRIPT=$(readlink -f "$0")
