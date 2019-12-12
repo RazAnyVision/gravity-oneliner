@@ -68,7 +68,7 @@ function backup_consul_data {
     set +e
     consul_pod=`kubectl get pods -A | egrep "consul-server|consul-dc01" | awk '{print $2}'`
     set -e
-    if [ ${consul_pod} != "" ]; then
+    if [[ ${consul_pod} != "" ]]; then
       snapshot_dir="/ssd/consul_data"
       mkdir -p $snapshot_dir
       snapshot_file="consul-backup.snap"
