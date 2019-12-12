@@ -3,7 +3,7 @@ set -e
 set -o pipefail
 
 # script version
-SCRIPT_VERSION="1.24.0-35"
+SCRIPT_VERSION="1.24.0-36"
 
 # Absolute path to this script
 SCRIPT=$(readlink -f "$0")
@@ -55,6 +55,7 @@ DOWNLOAD_ONLY="false"
 FORCE_DOWNLOAD="false"
 SKIP_CLUSTER_CHECK="false"
 MIGRATION_EXIST="false"
+ENABLE_LOCAL_REPO="false"
 
 # Network options
 POD_NETWORK_CIDR="10.244.0.0/16"
@@ -71,7 +72,7 @@ if [[ ${EUID} -ne 0 ]]; then
 fi
 
 ## Get home Dir of the current user
-if [ ${SUDO_USER} ]; then
+if [ "${SUDO_USER}" ]; then
   user=${SUDO_USER}
 else
   user=`whoami`
@@ -230,6 +231,11 @@ while test $# -gt 0; do
         ;;
         --download-dashboard)
             DASHBOARD_EXIST="true"
+        shift
+        continue
+        ;;
+        --enable-local-repo)
+            ENABLE_LOCAL_REPO="true"
         shift
         continue
         ;;
@@ -465,20 +471,37 @@ function is_tar_files_exists(){
 
   if [ "${SKIP_DRIVERS}" == "false" ]; then
     if [ -x "$(command -v apt-get)" ]; then
-      if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ]; then
+      if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ] && [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
         TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_FILE}")
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
+        fi
       fi
     elif [ -x "$(command -v yum)" ]; then
       if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ]; then
-        TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}" "${RHEL_NVIDIA_DRIVER_FILE}")
+        TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_FILE}")
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
+        fi
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_CONTAINER_FILE}")
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
+        fi
       else
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_FILE}")
       fi
     fi
+  fi
+
+  if [ "${ENABLE_LOCAL_REPO}" == "true" ]; then
+        if [ -x "$(command -v apt-get)" ]; then
+          TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
+        elif [ -x "$(command -v yum)" ]; then
+          TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
+        fi
   fi
 
   for file in "${TAR_FILES_LIST[@]}"; do
@@ -569,7 +592,7 @@ function download_files() {
       if [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         PACKAGES+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_URL}")
         PACKAGES+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_MD5_URL}")
-      else
+      elif [[ "${ENABLE_LOCAL_REPO}" == "false" ]] && [[ "${NVIDIA_DRIVER_METHOD}" == "host" ]]; then
         PACKAGES+=("${APT_REPO_FILE_URL}")
       fi
     elif [[ "${OS_PACKAGE}" == "redhat" ]] || [[ -x "$(command -v yum)" && -z "${OS_PACKAGE}" ]]; then
@@ -577,8 +600,19 @@ function download_files() {
         PACKAGES+=("${RHEL_NVIDIA_DRIVER_CONTAINER_URL}")
         PACKAGES+=("${RHEL_NVIDIA_DRIVER_CONTAINER_MD5_URL}")
       else
-        PACKAGES+=("${RHEL_PACKAGES_FILE_URL}" "${RHEL_NVIDIA_DRIVER_URL}")
+        PACKAGES+=("${RHEL_NVIDIA_DRIVER_URL}")
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          PACKAGES+=("${RHEL_PACKAGES_FILE_URL}")
+        fi
       fi
+    fi
+  fi
+
+  if [ "${ENABLE_LOCAL_REPO}" == "true" ];then
+    if [[ "${OS_PACKAGE}" == "ubuntu" ]] || [[ -x "$(command -v apt-get)" && -z "${OS_PACKAGE}" ]]; then
+      PACKAGES+=("${APT_REPO_FILE_URL}")
+    elif [[ "${OS_PACKAGE}" == "redhat" ]] || [[ -x "$(command -v yum)" && -z "${OS_PACKAGE}" ]]; then
+      PACKAGES+=("${RHEL_PACKAGES_FILE_URL}")
     fi
   fi
 
@@ -656,8 +690,19 @@ function online_packages_installation() {
   echo "#### Done installing packages." | tee -a ${LOG_FILE}
 }
 
-function create_yum_local_repo() {
-    cat >  /etc/yum.repos.d/local.repo <<EOF
+function enable_local_repo() {
+    local distro=$1
+    if [ "${distro}" == "ubuntu" ]; then
+      mkdir -p /opt/packages >>${LOG_FILE} 2>&1
+      tar -xf ${BASEDIR}/${APT_REPO_FILE_NAME} -C /opt/packages >>${LOG_FILE} 2>&1
+      mkdir -p /etc/apt-orig >>${LOG_FILE} 2>&1
+      rsync -q -a --ignore-existing /etc/apt/ /etc/apt-orig/ >>${LOG_FILE} 2>&1
+      rm -rf /etc/apt/sources.list.d/* >>${LOG_FILE} 2>&1
+      echo "deb [arch=amd64 trusted=yes allow-insecure=yes] http://$(hostname --ip-address | awk '{print $1}'):8085/ bionic main" > /etc/apt/sources.list
+    else
+      mkdir -p /opt/packages/public >>${LOG_FILE} 2>&1
+      tar -xf ${BASEDIR}/${RHEL_PACKAGES_FILE_NAME} -C /opt/packages/public >>${LOG_FILE} 2>&1
+      cat >  /etc/yum.repos.d/local.repo <<EOF
 [local]
 name=local
 baseurl=http://localhost:8085
@@ -665,8 +710,8 @@ enabled=1
 gpgcheck=0
 protect=0
 EOF
+    fi
 }
-
 function nvidia_drivers_container_installation() {
   echo "" | tee -a ${LOG_FILE}
   echo "=====================================================================" | tee -a ${LOG_FILE}
@@ -747,9 +792,9 @@ function nvidia_drivers_installation() {
       if [[ "${INSTALL_METHOD}" == "online" ]]; then
         yum install -y gcc kernel-devel-$(uname -r) kernel-headers-$(uname -r) >>${LOG_FILE} 2>&1
       else
-        mkdir -p /opt/packages/public >>${LOG_FILE} 2>&1
-        tar -xf ${BASEDIR}/${RHEL_PACKAGES_FILE_NAME} -C /opt/packages/public >>${LOG_FILE} 2>&1
-        create_yum_local_repo
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          enable_local_repo "rhel"
+        fi
         yum install --disablerepo='*' --enablerepo='local' -y gcc kernel-devel-$(uname -r) kernel-headers-$(uname -r) >>${LOG_FILE} 2>&1
       fi
       chmod +x ${BASEDIR}/${RHEL_NVIDIA_DRIVER_FILE} >>${LOG_FILE} 2>&1
