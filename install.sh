@@ -36,9 +36,10 @@ NVIDIA_DRIVER_REPO_VERSION="${NVIDIA_DRIVER_PACKAGE_VERSION}"
 
 # UBUNTU Options
 APT_REPO_FILE_NAME="apt-repo-20190821.tar"
-
+MD5_APT_REPO_FILE_NAME="${APT_REPO_FILE_NAME%%.*}.md5"
 # RHEL/CENTOS options
 RHEL_PACKAGES_FILE_NAME="rhel-packages-20190923.tar"
+MD5_RHEL_PACKAGES_FILE_NAME="${RHEL_PACKAGES_FILE_NAME%%.*}.md5"
 RHEL_NVIDIA_DRIVER_URL="http://us.download.nvidia.com/XFree86/Linux-x86_64/410.104/NVIDIA-Linux-x86_64-410.104.run"
 RHEL_NVIDIA_DRIVER_FILE="${RHEL_NVIDIA_DRIVER_URL##*/}"
 
@@ -275,7 +276,10 @@ done
 # evaluate variables after providing script arguments
 PRODUCT_MIGRATION_NAME="migration-workflow-${PRODUCT_NAME}"
 RHEL_PACKAGES_FILE_URL="${S3_BUCKET_URL}/repos/${RHEL_PACKAGES_FILE_NAME}"
+RHEL_PACKAGES_FILE_URL_MD5="${S3_BUCKET_URL}/repos/${MD5_RHEL_PACKAGES_FILE_NAME}"
 APT_REPO_FILE_URL="${S3_BUCKET_URL}/repos/${APT_REPO_FILE_NAME}"
+APT_REPO_FILE_URL_MD5="${S3_BUCKET_URL}/repos/${MD5_APT_REPO_FILE_NAME}"
+
 UBUNTU_NVIDIA_DRIVER_CONTAINER_URL="${S3_BUCKET_URL}/nvidia-driver/${NVIDIA_DRIVER_REPO_VERSION}/nvidia-driver-${NVIDIA_DRIVER_VERSION}-ubuntu1804-${NVIDIA_DRIVER_PACKAGE_VERSION}.tar.gz"
 UBUNTU_NVIDIA_DRIVER_CONTAINER_MD5_URL="${S3_BUCKET_URL}/nvidia-driver/${NVIDIA_DRIVER_REPO_VERSION}/nvidia-driver-${NVIDIA_DRIVER_VERSION}-ubuntu1804-${NVIDIA_DRIVER_PACKAGE_VERSION}.md5"
 RHEL_NVIDIA_DRIVER_CONTAINER_URL="${S3_BUCKET_URL}/nvidia-driver/${NVIDIA_DRIVER_REPO_VERSION}/nvidia-driver-${NVIDIA_DRIVER_VERSION}-rhel7-${NVIDIA_DRIVER_PACKAGE_VERSION}.tar.gz"
@@ -445,6 +449,7 @@ function download_files() {
         PACKAGES+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_MD5_URL}")
       elif [[ "${ENABLE_LOCAL_REPO}" == "false" ]] && [[ "${NVIDIA_DRIVER_METHOD}" == "host" ]]; then
         PACKAGES+=("${APT_REPO_FILE_URL}")
+        PACKAGES+=("${APT_REPO_FILE_URL_MD5}")
       fi
     elif [[ "${OS_PACKAGE}" == "redhat" ]] || [[ -x "$(command -v yum)" && -z "${OS_PACKAGE}" ]]; then
       if [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
@@ -454,6 +459,7 @@ function download_files() {
         PACKAGES+=("${RHEL_NVIDIA_DRIVER_URL}")
         if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
           PACKAGES+=("${RHEL_PACKAGES_FILE_URL}")
+          PACKAGES+=("${RHEL_PACKAGES_FILE_URL_MD5}")
         fi
       fi
     fi
@@ -462,8 +468,10 @@ function download_files() {
   if [ "${ENABLE_LOCAL_REPO}" == "true" ];then
     if [[ "${OS_PACKAGE}" == "ubuntu" ]] || [[ -x "$(command -v apt-get)" && -z "${OS_PACKAGE}" ]]; then
       PACKAGES+=("${APT_REPO_FILE_URL}")
+      PACKAGES+=("${APT_REPO_FILE_URL_MD5}")
     elif [[ "${OS_PACKAGE}" == "redhat" ]] || [[ -x "$(command -v yum)" && -z "${OS_PACKAGE}" ]]; then
       PACKAGES+=("${RHEL_PACKAGES_FILE_URL}")
+      PACKAGES+=("${RHEL_PACKAGES_FILE_URL_MD5}")
     fi
   fi
 
