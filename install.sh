@@ -15,6 +15,7 @@ INSTALL_METHOD="online"
 LOG_FILE="/var/log/gravity-installer.log"
 S3_BUCKET_URL="https://gravity-bundles.s3.eu-central-1.amazonaws.com"
 INSTALL_RANCHER="true"
+INSTALL_METALLB="false"
 
 # Gravity options
 K8S_BASE_NAME="anv-base-k8s"
@@ -111,6 +112,7 @@ function showhelp {
    echo "  [--skip-drivers] Skip Nvidia drivers installation"
    echo "  [--skip-product] Skip product/application installation"
    echo "  [--skip-rancher] Skip Rancher installation"
+   echo "  [--install-metallb] Apply metalLB installation"
    echo "  [--developer] Developer mode"
    echo ""
 }
@@ -216,6 +218,11 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --install-metallb)
+            INSTALL_METALLB="true"
+        shift
+        continue
+        ;;
         --add-migration-chart)
             MIGRATION_EXIST="true"
         shift
@@ -287,7 +294,8 @@ while test $# -gt 0; do
         continue
         ;;
         --deployment-type)
-            DEPLOYMENT_AVAILABILTY_TYPE=${none:-$EPLOYMENT_AVAILABILTY_TYPE}
+        shift
+            DEPLOYMENT_AVAILABILTY_TYPE=${none:-$DEPLOYMENT_AVAILABILTY_TYPE}
         shift
         continue
         ;;
@@ -714,12 +722,17 @@ function install_k8s_infra_app() {
   echo "==                Installing infra chart...                        ==" | tee -a ${LOG_FILE}
   echo "=====================================================================" | tee -a ${LOG_FILE}
   echo "" | tee -a ${LOG_FILE}
+  declare -a INFRA_STEPS=()
   if [[ "${SKIP_K8S_INFRA}" == "false" ]] && [[ -f "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" ]]; then
      if [ "${DEPLOYMENT_AVAILABILTY_TYPE}" == "none" ]; then
-        install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher=true
+        INFRA_STEPS+=("--env=rancher=true")
      elif [ "${DEPLOYMENT_AVAILABILTY_TYPE}" == "high-availabilty" ]; then
-        install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher=true --env=ha=true 
+        INFRA_STEPS+=("--env=ha=true")
+     elif [ "$INSTALL_METALLB" == "true" ]; then
+        INFRA_STEPS+=("--env=metallb=true") 
      fi
+        JOIN_INFRA_STEPS=$(join_by " " "${INFRA_STEPS[@]}")
+        install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" $JOIN_INFRA_STEPS
   else
       echo "### Skipping installing infra charts .." | tee -a ${LOG_FILE}
   fi
