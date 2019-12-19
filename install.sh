@@ -965,7 +965,7 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   install_gravity
   if [[ "${DUMMY_IP}" != "false" ]]; then
     SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
-    sed -i '/ExecStart=/aExecStartPost=\/bin\/bash\/root\/create_dummy_network.sh' /etc/systemd/system/$SERVICE_NAME
+    sed -i '/ExecStart=/aExecStartPost=\/bin\/bash \/root\/create_dummy_network.sh' /etc/systemd/system/$SERVICE_NAME
   fi
   #create_admin
   restore_secrets
