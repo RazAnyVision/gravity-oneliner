@@ -44,6 +44,7 @@ RHEL_NVIDIA_DRIVER_FILE="${RHEL_NVIDIA_DRIVER_URL##*/}"
 
 DEVELOPER_MODE="false"
 INSTALL_PRODUCT="false"
+DUMMY_IP="false"
 SKIP_K8S_BASE="false"
 SKIP_K8S_INFRA="false"
 SKIP_PRODUCT="false"
@@ -114,6 +115,7 @@ function showhelp {
    echo "  [--skip-drivers] Skip Nvidia drivers installation"
    echo "  [--skip-product] Skip product/application installation"
    echo "  [--developer] Developer mode"
+   echo "  [--dummy-ip] IP of dummy network interface to install on"
    echo ""
 }
 
@@ -282,6 +284,12 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --dummy-ip)
+        shift
+            DUMMY_IP=${1:-$DUMMY_IP}
+        shift
+        continue
+        ;;
         # commented below - feature disabled until we can send those params to the preflight.sh script as well
         #--pod-network-cidr)
         #shift
@@ -314,7 +322,7 @@ function cidr_overlap() (
   #check local cidr - This function was copied from the internet!
   subnet1="$1"
   subnet2="$2"
-  
+
   # calculate min and max of subnet1
   # calculate min and max of subnet2
   # find the common range (check_overlap)
@@ -344,7 +352,7 @@ function cidr_overlap() (
     second=$((($1&(256*256*255))>>16))
     third=$((($1&(256*255))>>8))
     fourth=$(($1&255))
-    printf "%d.%d.%d.%d\n" "$first" "$second" "$third" "$fourth" 
+    printf "%d.%d.%d.%d\n" "$first" "$second" "$third" "$fourth"
   }
 
   range1="$(read_range $subnet1)"
@@ -520,6 +528,7 @@ function download_files() {
   GRAVITY_PACKAGE_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/gravity_package_installer.sh"
   YQ_URL="https://github.com/mikefarah/yq/releases/download/2.4.0/yq_linux_amd64"
   SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/install.sh"
+  DUMMY_NETWORK_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/create_dummy_network.sh"
 
   if [ "${PRODUCT_NAME}" == "bettertomorrow" ]; then
     DASHBOARD_URL="https://s3.eu-central-1.amazonaws.com/anyvision-dashboard/1.24.0/AnyVision-1.24.0-linux-x86_64.AppImage"
@@ -530,7 +539,7 @@ function download_files() {
   fi
 
   ## SHARED PACKAGES TO DOWNLOAD
-  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${SCRIPT_URL}")
+  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${SCRIPT_URL}" "${DUMMY_NETWORK_SCRIPT_URL}")
 
   if [ ${SKIP_K8S_BASE} == "false" ]; then
     PACKAGES+=("${K8S_BASE_URL}")
@@ -722,7 +731,7 @@ function nvidia_drivers_installation() {
         if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
           enable_local_repo "ubuntu"
         fi
-        
+
       fi
       apt-get update>>${LOG_FILE} 2>&1
       apt-get install -y --no-install-recommends cuda-drivers=410.104-1 >>${LOG_FILE} 2>&1
@@ -783,15 +792,28 @@ function install_gravity() {
     tar -xf "${BASEDIR}/${K8S_BASE_NAME}-${K8S_BASE_VERSION}.tar" -C "${BASEDIR}/${DIR_K8S_BASE}" | tee -a ${LOG_FILE}
 
     cd ${BASEDIR}/${DIR_K8S_BASE}
-    ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
-        --cloud-provider=generic \
-        --pod-network-cidr="10.244.0.0/16" \
-        --service-cidr="10.172.0.0/16" \
-        --service-uid=5000 \
-        --vxlan-port=8472 \
-        --cluster=cluster.local \
-        --flavor=${NODE_ROLE} \
-        --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    if [[ "${DUMMY_IP}" == "false" ]]; then
+      ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
+          --cloud-provider=generic \
+          --pod-network-cidr="10.244.0.0/16" \
+          --service-cidr="10.172.0.0/16" \
+          --service-uid=5000 \
+          --vxlan-port=8472 \
+          --cluster=cluster.local \
+          --flavor=${NODE_ROLE} \
+          --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    else
+      ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
+          --cloud-provider=generic \
+          --pod-network-cidr="10.244.0.0/16" \
+          --service-cidr="10.172.0.0/16" \
+          --service-uid=5000 \
+          --vxlan-port=8472 \
+          --cluster=cluster.local \
+          --advertise-addr=${DUMMY_IP} \
+          --flavor=${NODE_ROLE} \
+          --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    fi
     cd ${BASEDIR}
 
     create_admin
@@ -937,7 +959,14 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   is_kubectl_exists
   #is_tar_files_exists
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
+  if [[ "${DUMMY_IP}" != "false" ]]; then
+    /bin/bash /root/create_dummy_network.sh
+  fi
   install_gravity
+  if [[ "${DUMMY_IP}" != "false" ]]; then
+    SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
+    sed -i '/ExecStart=/aExecStartPost=\/bin\/bash\/root\/create_dummy_network.sh' /etc/systemd/system/$SERVICE_NAME
+  fi
   #create_admin
   restore_secrets
   restore_sw_filer_data
@@ -966,7 +995,7 @@ else
       enable_local_repo "rhel"
     fi
   fi
-  
+
   if [ "${SKIP_DRIVERS}" == "false" ]; then
     if [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
       nvidia_drivers_container_installation
