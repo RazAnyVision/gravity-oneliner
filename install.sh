@@ -970,7 +970,8 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   install_gravity
   if [[ "${ADVERTISE_IP}" != "false" ]]; then
     SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
-    sed -i '/ExecStart=/aExecStartPost=\/bin\/bash \/root\/create_nic.sh ${ADVERTISE_IP}' /etc/systemd/system/$SERVICE_NAME
+    sed -i "/ExecStart=/aExecStartPost=\/bin\/bash \/root\/create_nic.sh ${ADVERTISE_IP}" /etc/systemd/system/$SERVICE_NAME
+    sed -i "/ExecStop=/aExecStopPost=\/bin\/bash \/root\/remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
   fi
   #create_admin
   restore_secrets
