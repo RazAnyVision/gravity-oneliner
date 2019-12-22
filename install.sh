@@ -947,6 +947,11 @@ function developer_env_install() {
 
 echo "Installing ${NODE_ROLE} node with method ${INSTALL_METHOD}" | tee -a ${LOG_FILE}
 echo "Checking server environment before installing"
+
+if ping -c 2 ${ADVERTISE_IP} &> /dev/null; then
+  echo "Advertise IP is already taken! please choose another IP. Exiting now."
+  exit 0
+fi
 cidr_check
 
 if [[ "${INSTALL_METHOD}" == "online" ]]; then
