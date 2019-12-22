@@ -960,8 +960,7 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   #is_tar_files_exists
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
   if [[ "${ADVERTISE_IP}" != "false" ]]; then
-    /bin/bash /root/
-     ${ADVERTISE_IP}
+    /bin/bash /root/create_nic.sh ${ADVERTISE_IP}
   fi
   install_gravity
   if [[ "${ADVERTISE_IP}" != "false" ]]; then
