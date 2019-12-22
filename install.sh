@@ -960,12 +960,12 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   #is_tar_files_exists
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
   if [[ "${DUMMY_IP}" != "false" ]]; then
-    /bin/bash /root/create_dummy_network.sh
+    /bin/bash /root/create_dummy_network.sh ${DUMMY_IP}
   fi
   install_gravity
   if [[ "${DUMMY_IP}" != "false" ]]; then
     SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
-    sed -i '/ExecStart=/aExecStartPost=\/bin\/bash \/root\/create_dummy_network.sh' /etc/systemd/system/$SERVICE_NAME
+    sed -i '/ExecStart=/aExecStartPost=\/bin\/bash \/root\/create_dummy_network.sh ${DUMMY_IP}' /etc/systemd/system/$SERVICE_NAME
   fi
   #create_admin
   restore_secrets
