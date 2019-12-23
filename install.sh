@@ -14,6 +14,7 @@ NODE_ROLE="aio"
 INSTALL_METHOD="online"
 LOG_FILE="/var/log/gravity-installer.log"
 S3_BUCKET_URL="https://gravity-bundles.s3.eu-central-1.amazonaws.com"
+INSTALL_RANCHER="true"
 
 # Gravity options
 K8S_BASE_NAME="anv-base-k8s"
@@ -44,6 +45,7 @@ RHEL_NVIDIA_DRIVER_FILE="${RHEL_NVIDIA_DRIVER_URL##*/}"
 
 DEVELOPER_MODE="false"
 INSTALL_PRODUCT="false"
+ADVERTISE_IP="false"
 SKIP_K8S_BASE="false"
 SKIP_K8S_INFRA="false"
 SKIP_PRODUCT="false"
@@ -91,6 +93,7 @@ function showhelp {
    echo "  [-m|--install-method] Installation method [online|airgap] (default: online)"
    echo "  [-p|--product-name] Product name to install"
    echo "  [-v|--product-version] Product version to install (default: ${PRODUCT_VERSION})"
+   echo "  [--product-repo-version] Product repo version to install (default: ${PRODUCT_VERSION})"
    echo "  [--download-only] Download all the required installation files (to ${BASEDIR})"
    echo "  [--force-download] Allow overwrite scripts if exist"
    echo "  [--os-package] Select OS package to download, Force download only [redhat|ubuntu] (default: machine OS)"
@@ -98,14 +101,16 @@ function showhelp {
    echo "  [--base-url] Base URL for downloading the installation files (default: https://gravity-bundles.s3.eu-central-1.amazonaws.com)"
    echo "  [--auto-install-product] Auto deploy application after installation (from Rancher catalog)"
    echo "  [--add-migration-chart] Auto deploy migration after installation (from Rancher catalog)"
-   echo "  [--k8s-base-version] Kubernetes/Gravity base version (default: ${K8S_BASE_VERSION})"
-   echo "  [--k8s-infra-version] Infrastructure layer version (default: ${K8S_INFRA_VERSION})"
+   echo "  [--k8s-base-repo-version] Kubernetes/Gravity base version (default: ${K8S_BASE_VERSION})"
+   echo "  [--k8s-infra-repo-version] Infrastructure layer version (default: ${K8S_INFRA_VERSION})"
    echo "  [--skip-cidr-check] Force install without checking CIDR overlap"
    # commented below - feature disabled until we can send those params to the preflight.sh script as well
    # echo "  [--pod-network-cidr] Config pod network CIDR [Default: ${POD_NETWORK_CIDR}]"
    # echo "  [--service-cidr] Config service CIDR [Default: ${SERVICE_CIDR}]"
    echo "  [--driver-method] Nvidia driver installation method [host|container] (default: ${NVIDIA_DRIVER_METHOD})"
    echo "  [--driver-version] Nvidia driver version (requires --driver-method=container) [410-104|418-113] (default: ${NVIDIA_DRIVER_VERSION})"
+   echo "  [--driver-package-version] Nvidia driver package version (default: ${NVIDIA_DRIVER_PACKAGE_VERSION})"
+   echo "  [--driver-repo-version] Nvidia driver repo version (default: ${NVIDIA_DRIVER_PACKAGE_VERSION})"
    echo "  [--enable-local-repo] force the download of the repo package file (and deploy it when spcify with airgap mode)"
    echo "  [--skip-cluster-check] Skip existing cluster check"
    echo "  [--skip-md5-check] Skip MD5 checksum"
@@ -113,7 +118,9 @@ function showhelp {
    echo "  [--skip-k8s-infra] Skip infrastructure layer installation"
    echo "  [--skip-drivers] Skip Nvidia drivers installation"
    echo "  [--skip-product] Skip product/application installation"
+   echo "  [--skip-rancher] Skip Rancher installation"
    echo "  [--developer] Developer mode"
+   echo "  [--advertise-ip] IP address of network interface to install on"
    echo ""
 }
 
@@ -212,6 +219,11 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --skip-rancher)
+            INSTALL_RANCHER="false"
+        shift
+        continue
+        ;;
         --add-migration-chart)
             MIGRATION_EXIST="true"
         shift
@@ -239,27 +251,37 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --driver-package-version)
+        shift
+            NVIDIA_DRIVER_PACKAGE_VERSION=${1:-$NVIDIA_DRIVER_PACKAGE_VERSION}
+        shift
+        continue
+        ;;
         --k8s-base-repo-version)
         shift
             K8S_BASE_REPO_VERSION=${1:-$K8S_BASE_REPO_VERSION}
+            K8S_BASE_REPO_FLAG="true"
         shift
         continue
         ;;
         --k8s-infra-repo-version)
         shift
             K8S_INFRA_REPO_VERSION=${1:-$K8S_INFRA_REPO_VERSION}
+            K8S_INFRA_REPO_FLAG="true"
         shift
         continue
         ;;
         --product-repo-version)
         shift
             PRODUCT_REPO_VERSION=${1:-$PRODUCT_REPO_VERSION}
+            PRODUCT_REPO_FLAG="true"
         shift
         continue
         ;;
-        --nvidia-driver-repo-version)
+        --driver-repo-version)
         shift
             NVIDIA_DRIVER_REPO_VERSION=${1:-$NVIDIA_DRIVER_REPO_VERSION}
+            NVIDIA_DRIVER_REPO_FLAG="true"
         shift
         continue
         ;;
@@ -282,6 +304,12 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --advertise-ip)
+        shift
+            ADVERTISE_IP=${1:-$ADVERTISE_IP}
+        shift
+        continue
+        ;;
         # commented below - feature disabled until we can send those params to the preflight.sh script as well
         #--pod-network-cidr)
         #shift
@@ -299,6 +327,12 @@ while test $# -gt 0; do
     break
 done
 
+# change repo version in case repo version flag exist
+[ -z ${K8S_BASE_REPO_FLAG} ] && K8S_BASE_REPO_VERSION="${K8S_BASE_VERSION}"
+[ -z ${K8S_INFRA_REPO_FLAG} ] && K8S_INFRA_REPO_VERSION="${K8S_INFRA_VERSION}"
+[ -z ${PRODUCT_REPO_FLAG} ] && PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
+[ -z ${NVIDIA_DRIVER_REPO_FLAG} ] && NVIDIA_DRIVER_REPO_VERSION="${NVIDIA_DRIVER_PACKAGE_VERSION}"
+
 # evaluate variables after providing script arguments
 PRODUCT_MIGRATION_NAME="migration-workflow-${PRODUCT_NAME}"
 RHEL_PACKAGES_FILE_URL="${S3_BUCKET_URL}/repos/${RHEL_PACKAGES_FILE_NAME}"
@@ -314,7 +348,7 @@ function cidr_overlap() (
   #check local cidr - This function was copied from the internet!
   subnet1="$1"
   subnet2="$2"
-  
+
   # calculate min and max of subnet1
   # calculate min and max of subnet2
   # find the common range (check_overlap)
@@ -344,7 +378,7 @@ function cidr_overlap() (
     second=$((($1&(256*256*255))>>16))
     third=$((($1&(256*255))>>8))
     fourth=$(($1&255))
-    printf "%d.%d.%d.%d\n" "$first" "$second" "$third" "$fourth" 
+    printf "%d.%d.%d.%d\n" "$first" "$second" "$third" "$fourth"
   }
 
   range1="$(read_range $subnet1)"
@@ -520,6 +554,7 @@ function download_files() {
   GRAVITY_PACKAGE_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/gravity_package_installer.sh"
   YQ_URL="https://github.com/mikefarah/yq/releases/download/2.4.0/yq_linux_amd64"
   SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/install.sh"
+  ADD_NETWORK_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/create_nic.sh"
 
   if [ "${PRODUCT_NAME}" == "bettertomorrow" ]; then
     DASHBOARD_URL="https://s3.eu-central-1.amazonaws.com/anyvision-dashboard/1.24.0/AnyVision-1.24.0-linux-x86_64.AppImage"
@@ -530,7 +565,7 @@ function download_files() {
   fi
 
   ## SHARED PACKAGES TO DOWNLOAD
-  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${SCRIPT_URL}")
+  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${SCRIPT_URL}" "${ADD_NETWORK_SCRIPT_URL}")
 
   if [ ${SKIP_K8S_BASE} == "false" ]; then
     PACKAGES+=("${K8S_BASE_URL}")
@@ -722,7 +757,7 @@ function nvidia_drivers_installation() {
         if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
           enable_local_repo "ubuntu"
         fi
-        
+
       fi
       apt-get update>>${LOG_FILE} 2>&1
       apt-get install -y --no-install-recommends cuda-drivers=410.104-1 >>${LOG_FILE} 2>&1
@@ -783,15 +818,28 @@ function install_gravity() {
     tar -xf "${BASEDIR}/${K8S_BASE_NAME}-${K8S_BASE_VERSION}.tar" -C "${BASEDIR}/${DIR_K8S_BASE}" | tee -a ${LOG_FILE}
 
     cd ${BASEDIR}/${DIR_K8S_BASE}
-    ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
-        --cloud-provider=generic \
-        --pod-network-cidr="10.244.0.0/16" \
-        --service-cidr="10.172.0.0/16" \
-        --service-uid=5000 \
-        --vxlan-port=8472 \
-        --cluster=cluster.local \
-        --flavor=${NODE_ROLE} \
-        --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    if [[ "${ADVERTISE_IP}" == "false" ]]; then
+      ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
+          --cloud-provider=generic \
+          --pod-network-cidr="10.244.0.0/16" \
+          --service-cidr="10.172.0.0/16" \
+          --service-uid=5000 \
+          --vxlan-port=8472 \
+          --cluster=cluster.local \
+          --flavor=${NODE_ROLE} \
+          --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    else
+      ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
+          --cloud-provider=generic \
+          --pod-network-cidr="10.244.0.0/16" \
+          --service-cidr="10.172.0.0/16" \
+          --service-uid=5000 \
+          --vxlan-port=8472 \
+          --cluster=cluster.local \
+          --advertise-addr=${ADVERTISE_IP} \
+          --flavor=${NODE_ROLE} \
+          --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    fi
     cd ${BASEDIR}
 
     create_admin
@@ -830,7 +878,7 @@ function install_k8s_infra_app() {
   echo "=====================================================================" | tee -a ${LOG_FILE}
   echo "" | tee -a ${LOG_FILE}
   if [[ "${SKIP_K8S_INFRA}" == "false" ]] && [[ -f "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" ]]; then
-    install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher=true
+    install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher="${INSTALL_RANCHER}"
   else
     echo "### Skipping installing infra charts .." | tee -a ${LOG_FILE}
   fi
@@ -925,6 +973,11 @@ function developer_env_install() {
 
 echo "Installing ${NODE_ROLE} node with method ${INSTALL_METHOD}" | tee -a ${LOG_FILE}
 echo "Checking server environment before installing"
+
+if ping -c 2 -w 5 ${ADVERTISE_IP} &> /dev/null; then
+  echo "Advertise IP is already taken! please choose another IP. Exiting now."
+  exit 0
+fi
 cidr_check
 
 if [[ "${INSTALL_METHOD}" == "online" ]]; then
@@ -937,7 +990,15 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   is_kubectl_exists
   #is_tar_files_exists
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
+  if [[ "${ADVERTISE_IP}" != "false" ]]; then
+    /bin/bash /root/create_nic.sh ${ADVERTISE_IP}
+  fi
   install_gravity
+  if [[ "${ADVERTISE_IP}" != "false" ]]; then
+    SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
+    sed -i "/ExecStart=/aExecStartPost=\/bin\/bash \/root\/create_nic.sh ${ADVERTISE_IP}" /etc/systemd/system/$SERVICE_NAME
+    sed -i "/ExecStop=/aExecStopPost=\/bin\/bash \/root\/remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
+  fi
   #create_admin
   restore_secrets
   restore_sw_filer_data
@@ -966,7 +1027,7 @@ else
       enable_local_repo "rhel"
     fi
   fi
-  
+
   if [ "${SKIP_DRIVERS}" == "false" ]; then
     if [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
       nvidia_drivers_container_installation
