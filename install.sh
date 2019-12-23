@@ -527,6 +527,7 @@ function download_files() {
   YQ_URL="https://github.com/mikefarah/yq/releases/download/2.4.0/yq_linux_amd64"
   SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/install.sh"
   ADD_NETWORK_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/create_nic.sh"
+  DELETE_NETWORK_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/remove_nic.sh"
 
   if [ "${PRODUCT_NAME}" == "bettertomorrow" ]; then
     DASHBOARD_URL="https://s3.eu-central-1.amazonaws.com/anyvision-dashboard/1.24.0/AnyVision-1.24.0-linux-x86_64.AppImage"
@@ -537,7 +538,7 @@ function download_files() {
   fi
 
   ## SHARED PACKAGES TO DOWNLOAD
-  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${SCRIPT_URL}" "${ADD_NETWORK_SCRIPT_URL}")
+  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${SCRIPT_URL}" "${ADD_NETWORK_SCRIPT_URL}" "${DELETE_NETWORK_SCRIPT_URL}")
 
   if [ ${SKIP_K8S_BASE} == "false" ]; then
     PACKAGES+=("${K8S_BASE_URL}")
