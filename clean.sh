@@ -101,7 +101,7 @@ function backup_pv_id {
     fi
   else
     echo "#### kubectl does not exists, skipping backup pv id."
-  fi    
+  fi
 
 }
 
@@ -132,7 +132,7 @@ function remove_nvidia_drivers {
       set -e
     fi
   else
-    echo "#### Nvidia Driver does not exists or is disabled, skipping nvidia driver removal phase phase."  
+    echo "#### Nvidia Driver does not exists or is disabled, skipping nvidia driver removal phase phase."
   fi
 }
 
@@ -182,7 +182,7 @@ function disable_k8s {
   elif [ -x "$(command -v gravity)" ] ; then
     echo "###################################"
     echo "# Uninstalling gravity. . .       #"
-    echo "###################################"  
+    echo "###################################"
     gravity leave --force --confirm
     echo ""
     echo "Please reboot the host"
@@ -190,7 +190,7 @@ function disable_k8s {
   elif [ -f "${BASEDIR}/gravity-base-k8s/gravity" ] ; then
     echo "###################################"
     echo "# Uninstalling gravity. . .       #"
-    echo "###################################"    
+    echo "###################################"
     ${BASEDIR}/gravity-base-k8s/gravity leave --force --confirm
     rm -rf "${BASEDIR}/gravity-base-k8s"
     echo ""
@@ -256,7 +256,7 @@ while test $# -gt 0; do
         backup_pv_id
         backup_consul_data
         disable_k8s
-        disable_docker       
+        disable_docker
         remove_nvidia_docker
         purge_docker
         remove_nvidia_drivers
