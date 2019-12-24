@@ -983,7 +983,7 @@ function developer_env_install() {
 echo "Installing ${NODE_ROLE} node with method ${INSTALL_METHOD}" | tee -a ${LOG_FILE}
 echo "Checking server environment before installing"
 
-if ping -c 2 -w 5 ${ADVERTISE_IP} &> /dev/null; then
+if ping -c 2 -w 5 "${ADVERTISE_IP}" &> /dev/null; then
   echo "Advertise IP is already taken! please choose another IP. Exiting now."
   exit 0
 fi
@@ -1000,13 +1000,15 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   #is_tar_files_exists
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
   if [[ "${ADVERTISE_IP}" != "false" ]]; then
-    /bin/bash /root/create_nic.sh ${ADVERTISE_IP}
+    cp "${BASEDIR}/create_nic.sh" "${BASEDIR}/remove_nic.sh" /usr/bin/
+
+    /bin/bash create_nic.sh "${ADVERTISE_IP}"
   fi
   install_gravity
   if [[ "${ADVERTISE_IP}" != "false" ]]; then
     SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
-    sed -i "/ExecStart=/aExecStartPost=\/bin\/bash \/root\/create_nic.sh ${ADVERTISE_IP}" /etc/systemd/system/$SERVICE_NAME
-    sed -i "/ExecStop=/aExecStopPost=\/bin\/bash \/root\/remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
+    sed -i "/ExecStart=/aExecStartPost=\/bin\/bash create_nic.sh ${ADVERTISE_IP}" /etc/systemd/system/$SERVICE_NAME
+    sed -i "/ExecStop=/aExecStopPost=\/bin\/bash remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
   fi
   #create_admin
   restore_secrets
