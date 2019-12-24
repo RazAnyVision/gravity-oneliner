@@ -993,7 +993,6 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
   if [[ "${ADVERTISE_IP}" != "false" ]]; then
     cp "${BASEDIR}/create_nic.sh" "${BASEDIR}/remove_nic.sh" /usr/bin/
-
     /bin/bash create_nic.sh "${ADVERTISE_IP}"
   fi
   install_gravity
@@ -1018,7 +1017,16 @@ else
   is_kubectl_exists
   is_tar_files_exists
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
+  if [[ "${ADVERTISE_IP}" != "false" ]]; then
+    cp "${BASEDIR}/create_nic.sh" "${BASEDIR}/remove_nic.sh" /usr/bin/
+    /bin/bash create_nic.sh "${ADVERTISE_IP}"
+  fi
   install_gravity
+  if [[ "${ADVERTISE_IP}" != "false" ]]; then
+    SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
+    sed -i "/ExecStart=/aExecStartPost=\/bin\/bash create_nic.sh ${ADVERTISE_IP}" /etc/systemd/system/$SERVICE_NAME
+    sed -i "/ExecStop=/aExecStopPost=\/bin\/bash remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
+  fi
   #create_admin
   restore_secrets
   restore_sw_filer_data
