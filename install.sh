@@ -420,6 +420,10 @@ function download_files() {
   K8S_INFRA_MD5_URL="${S3_BUCKET_URL}/${K8S_INFRA_NAME}/${K8S_INFRA_REPO_VERSION}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.md5"
   K8S_PRODUCT_URL="${S3_BUCKET_URL}/products/${PRODUCT_NAME}/${PRODUCT_REPO_VERSION}/${PRODUCT_NAME}-${PRODUCT_VERSION}.tar.gz"
   K8S_PRODUCT_MD5_URL="${S3_BUCKET_URL}/products/${PRODUCT_NAME}/${PRODUCT_REPO_VERSION}/${PRODUCT_NAME}-${PRODUCT_VERSION}.md5"
+  if [ "${PRODUCT_NAME}" == "hq-ha" ]; then
+    K8S_PRODUCT_DATA_URL="${S3_BUCKET_URL}/products/${PRODUCT_NAME}-data/${PRODUCT_REPO_VERSION}/${PRODUCT_NAME}-data-${PRODUCT_VERSION}.tar.gz"
+    K8S_PRODUCT_DATA_MD5_URL="${S3_BUCKET_URL}/products/${PRODUCT_NAME}-data/${PRODUCT_REPO_VERSION}/${PRODUCT_NAME}-data-${PRODUCT_VERSION}.md5"
+  fi
   K8S_PRODUCT_MIGRATION_URL="${S3_BUCKET_URL}/products/${PRODUCT_MIGRATION_NAME}/${PRODUCT_REPO_VERSION}/${PRODUCT_MIGRATION_NAME}-${PRODUCT_VERSION}.tar.gz"
   K8S_PRODUCT_MIGRATION_MD5_URL="${S3_BUCKET_URL}/products/${PRODUCT_MIGRATION_NAME}/${PRODUCT_REPO_VERSION}/${PRODUCT_MIGRATION_NAME}-${PRODUCT_VERSION}.md5"
 
@@ -454,6 +458,10 @@ function download_files() {
   if [ ${SKIP_PRODUCT} == "false" ]; then
     PACKAGES+=("${K8S_PRODUCT_URL}")
     PACKAGES+=("${K8S_PRODUCT_MD5_URL}")
+    if [ ${PRODUCT_NAME} == "hq-ha" ]; then
+      PACKAGES+=("${K8S_PRODUCT_DATA_URL}")
+      PACKAGES+=("${K8S_PRODUCT_DATA_MD5_URL}")
+    fi
     if [ "${MIGRATION_EXIST}" == "true" ]; then
       PACKAGES+=("${K8S_PRODUCT_MIGRATION_URL}")
       PACKAGES+=("${K8S_PRODUCT_MIGRATION_MD5_URL}")
@@ -747,6 +755,9 @@ function install_product_app() {
   echo "" | tee -a ${LOG_FILE}
   if [[ "${SKIP_PRODUCT}" == "false" ]] && [[ -f "${BASEDIR}/${PRODUCT_NAME}-${PRODUCT_VERSION}.tar.gz" ]]; then
     install_gravity_app "${BASEDIR}/${PRODUCT_NAME}-${PRODUCT_VERSION}.tar.gz" --env=install_product=${INSTALL_PRODUCT}
+    if [ "${PRODUCT_NAME}" == "hq-ha" ]; then
+      install_gravity_app "${BASEDIR}/${PRODUCT_NAME}-data-${PRODUCT_VERSION}.tar.gz" --env=install_product=${INSTALL_PRODUCT}
+    fi
     if [ "$MIGRATION_EXIST" == "true" ] && [ -f "${BASEDIR}/${PRODUCT_MIGRATION_NAME}-${PRODUCT_VERSION}.tar.gz" ] ; then
       install_gravity_app "${BASEDIR}/${PRODUCT_MIGRATION_NAME}-${PRODUCT_VERSION}.tar.gz" --env=install_product=false
     fi
