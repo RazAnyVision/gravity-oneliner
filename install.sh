@@ -789,6 +789,9 @@ function developer_env_install() {
   echo "Installing Tilt..." | tee -a ${LOG_FILE}
   curl -fsSL https://raw.githubusercontent.com/windmilleng/tilt/master/scripts/install.sh | bash 
   echo "" | tee -a ${LOG_FILE}
+  gravity exec sed -i 's/--iptables=false//' /usr/lib/systemd/system/docker.service >>${LOG_FILE} 2>&1
+  gravity exec systemctl daemon-reload >>${LOG_FILE} 2>&1
+  gravity exec systemctl restart docker.service >>${LOG_FILE} 2>&1
   #echo "Cloning tilt git repo to /tmp/tilt" | tee -a ${LOG_FILE}
   #git clone git@github.com:AnyVisionltd/tilt.git /tmp/tilt >>${LOG_FILE} 2>&1
 
