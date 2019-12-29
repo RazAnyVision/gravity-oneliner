@@ -63,7 +63,7 @@ if [ -n "${PACKAGE_CONTENT}" ]; then
   fi 
 
   printf "#### Executing ${APP_STRING} install hook ...\n" | tee -a ${IMPORT_LOG_FILE}
-  gravity exec gravity app pull --force --insecure --ops-url=https://localhost:3009 $@ ${APP_STRING} | tee -a ${IMPORT_LOG_FILE}
+  gravity exec gravity app pull --force --insecure --ops-url=https://localhost:3009  ${APP_STRING} | tee -a ${IMPORT_LOG_FILE}
 
   printf "#### Executing ${APP_STRING} install hook ...\n" | tee -a ${INSTALL_LOG_FILE}
   gravity exec gravity app hook $@ ${APP_STRING} install | tee -a ${INSTALL_LOG_FILE}
