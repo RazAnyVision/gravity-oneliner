@@ -55,7 +55,7 @@ DOWNLOAD_ONLY="false"
 FORCE_DOWNLOAD="false"
 SKIP_CLUSTER_CHECK="false"
 MIGRATION_EXIST="false"
-DEPLOYMENT_AVAILABILTY_TYPE="none"
+HIGH_AVAILABILTY="false"
 
 echo "------ Staring Gravity installer $(date '+%Y-%m-%d %H:%M:%S')  ------" >${LOG_FILE} 2>&1
 
@@ -91,7 +91,7 @@ function showhelp {
    echo "  [--product-repo-version] Product repo version to install (default: ${PRODUCT_VERSION})"
    echo "  [--download-only] Download all the required installation files (to ${BASEDIR})"
    echo "  [--force-download] Allow overwrite scripts if exist"
-   echo "  [--deployment-type] Availability Deployment type [none|high-availability] (default: $DEPLOYMENT_AVAILABILTY_TYPE)"
+   echo "  [--high-availabilty] High Availability Deployment [false|true] (default: $HIGH_AVAILABILTY)"
    echo "  [--os-package] Select OS package to download, Force download only [redhat|ubuntu] (default: machine OS)"
    echo "  [--download-dashboard] Download product dashboard (to ${BASEDIR})"
    echo "  [--auto-install-product] Auto deploy application after installation (from Rancher catalog)"
@@ -293,9 +293,9 @@ while test $# -gt 0; do
         shift
         continue
         ;;
-        --deployment-type)
+        --high-availabilty)
         shift
-            DEPLOYMENT_AVAILABILTY_TYPE=${none:-$DEPLOYMENT_AVAILABILTY_TYPE}
+            HIGH_AVAILABILTY=${1:-$HIGH_AVAILABILTY}
         shift
         continue
         ;;
@@ -732,11 +732,13 @@ function install_k8s_infra_app() {
   echo "" | tee -a ${LOG_FILE}
   declare -a INFRA_STEPS=()
   if [[ "${SKIP_K8S_INFRA}" == "false" ]] && [[ -f "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" ]]; then
-     if [ "${DEPLOYMENT_AVAILABILTY_TYPE}" == "none" ]; then
+     if [ "${INSTALL_RANCHER}" == "true" ]; then
         INFRA_STEPS+=("--env=rancher=true")
-     elif [ "${DEPLOYMENT_AVAILABILTY_TYPE}" == "high-availabilty" ]; then
+     fi
+     if [ "${HIGH_AVAILABILTY}" == "true" ]; then
         INFRA_STEPS+=("--env=ha=true")
-     elif [ "$INSTALL_METALLB" == "true" ]; then
+     fi
+     if [ "$INSTALL_METALLB" == "true" ]; then
         INFRA_STEPS+=("--env=metallb=true") 
      fi
         JOIN_INFRA_STEPS=$(join_by " " "${INFRA_STEPS[@]}")
@@ -892,3 +894,4 @@ echo "==========================================================================
 if [ ${nvidia_installed} ]; then
   echo "                  New nvidia driver has been installed, Reboot is required!               " | tee -a ${LOG_FILE}
 fi
+
