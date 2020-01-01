@@ -15,7 +15,7 @@ INSTALL_METHOD="online"
 LOG_FILE="/var/log/gravity-installer.log"
 S3_BUCKET_URL="https://gravity-bundles.s3.eu-central-1.amazonaws.com"
 INSTALL_RANCHER="true"
-INSTALL_METALLB="false"
+METALLB_ADDRESS=""
 
 # Gravity options
 K8S_BASE_NAME="anv-base-k8s"
@@ -112,7 +112,7 @@ function showhelp {
    echo "  [--skip-drivers] Skip Nvidia drivers installation"
    echo "  [--skip-product] Skip product/application installation"
    echo "  [--skip-rancher] Skip Rancher installation"
-   echo "  [--install-metallb] Apply metalLB installation"
+   echo "  [--metallb-address] Apply metalLB installation, with address"
    echo "  [--developer] Developer mode"
    echo ""
 }
@@ -218,8 +218,9 @@ while test $# -gt 0; do
         shift
         continue
         ;;
-        --install-metallb)
-            INSTALL_METALLB="true"
+        --metallb-address)
+        shift
+            METALLB_ADDRESS=${1:-$METALLB_ADDRESS}
         shift
         continue
         ;;
@@ -738,8 +739,8 @@ function install_k8s_infra_app() {
      if [ "${HIGH_AVAILABILTY}" == "true" ]; then
         INFRA_STEPS+=("--env=ha=true")
      fi
-     if [ "$INSTALL_METALLB" == "true" ]; then
-        INFRA_STEPS+=("--env=metallb=true") 
+     if [ -z "$METALLB_ADDRESS" ]; then
+        INFRA_STEPS+=("--env=metallb_address=$METALLB_ADDRESS") 
      fi
         JOIN_INFRA_STEPS=$(join_by " " "${INFRA_STEPS[@]}")
         install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" $JOIN_INFRA_STEPS
