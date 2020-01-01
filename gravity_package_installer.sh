@@ -15,7 +15,7 @@ PACKAGE_NAME="${PACKAGE_FILENAME%.tar.gz}"
 
 
 # check if the APP is already listed in the gravity package list
-# if exist then skip all load 
+# if exist then skip all load
 # if not load it.
 
 
@@ -26,6 +26,8 @@ PACKAGE_CONTENT=$(timeout 1 tar tf ${PACKAGE} resources/app.yaml 2>/dev/null)
 
 # Shift positionals to remove the package file name from script arguments
 shift
+
+gravity ops connect --insecure https://localhost:3009 admin Passw0rd123 | tee -a ${IMPORT_LOG_FILE}
 
 if [ -n "${PACKAGE_CONTENT}" ]; then
      APP_VERSION=$(timeout 1 tar xf ${PACKAGE} resources/app.yaml --to-command "${BASEDIR}/yq r - metadata.resourceVersion; true")
@@ -46,13 +48,13 @@ if [ -n "${PACKAGE_CONTENT}" ]; then
      APP_STRING="${REPO_NAME}/${APP_NAME}:${APP_VERSION}"
      printf "#### Starting installation of ${APP_STRING} ...\n" | tee -a ${INSTALL_LOG_FILE}
 
-    APP_IN_LIST=$(gravity package list | grep ${APP_STRING})
-    
+    APP_IN_LIST=$(gravity package list --insecure --ops-url=https://localhost:3009 | grep ${APP_STRING})
+
     PACKAGE_STAT=""
     if [ -n "${APP_IN_LIST}" ]; then
-       APP_STAT=true 
+       APP_STAT=true
     fi
-    
+
   if [ -z "${APP_STAT}" ]; then
      printf "#### Connecting to Gravity Ops Center ...\n" | tee -a ${IMPORT_LOG_FILE}
      gravity ops connect --insecure https://localhost:3009 admin Passw0rd123 | tee -a ${IMPORT_LOG_FILE}
@@ -60,7 +62,7 @@ if [ -n "${PACKAGE_CONTENT}" ]; then
      gravity app import --force --insecure --ops-url=https://localhost:3009 ${PACKAGE} | tee -a ${IMPORT_LOG_FILE}
      printf "#### Exporting ${APP_STRING} to gravity Docker registry ...\n" | tee -a ${IMPORT_LOG_FILE}
      gravity exec gravity app export --insecure --ops-url=https://localhost:3009 ${APP_STRING}
-  fi 
+  fi
 
   printf "#### Executing ${APP_STRING} install hook ...\n" | tee -a ${IMPORT_LOG_FILE}
   gravity exec gravity app pull --force --insecure --ops-url=https://localhost:3009  ${APP_STRING} | tee -a ${IMPORT_LOG_FILE}
