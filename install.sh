@@ -3,7 +3,7 @@ set -e
 set -o pipefail
 
 # script version
-SCRIPT_VERSION="1.24.0-23"
+SCRIPT_VERSION="1.24.0-24"
 
 # Absolute path to this script
 SCRIPT=$(readlink -f "$0")
@@ -23,7 +23,7 @@ K8S_INFRA_NAME="k8s-infra"
 K8S_INFRA_VERSION="1.0.11"
 
 PRODUCT_NAME="bettertomorrow-trtis"
-PRODUCT_VERSION="1.24.0-rc.8"
+PRODUCT_VERSION="1.24.0-rc.11"
 
 # NVIDIA driver options
 NVIDIA_DRIVER_METHOD="container"
