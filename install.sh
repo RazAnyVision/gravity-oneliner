@@ -15,7 +15,7 @@ INSTALL_METHOD="online"
 LOG_FILE="/var/log/gravity-installer.log"
 S3_BUCKET_URL="https://gravity-bundles.s3.eu-central-1.amazonaws.com"
 INSTALL_RANCHER="true"
-METALLB_ADDRESS=""
+METALLB_ADDRESS="null"
 
 # Gravity options
 K8S_BASE_NAME="anv-base-k8s"
@@ -739,7 +739,7 @@ function install_k8s_infra_app() {
      if [ "${HIGH_AVAILABILTY}" == "true" ]; then
         INFRA_STEPS+=("--env=ha=true")
      fi
-     if [ -z "$METALLB_ADDRESS" ]; then
+     if [ "$METALLB_ADDRESS" != "null" ]; then
         INFRA_STEPS+=("--env=metallb_address=$METALLB_ADDRESS") 
      fi
         JOIN_INFRA_STEPS=$(join_by " " "${INFRA_STEPS[@]}")
