@@ -503,12 +503,12 @@ function is_tar_files_exists(){
     elif [ -x "$(command -v yum)" ]; then
       if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ]; then
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_FILE}")
-        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+        if [ "${ENABLE_LOCAL_REPO}" == "true" ]; then
           TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
         fi
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_CONTAINER_FILE}")
-        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+        if [ "${ENABLE_LOCAL_REPO}" == "true" ]; then
           TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
         fi
       else
