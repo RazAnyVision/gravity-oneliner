@@ -479,9 +479,6 @@ function is_tar_files_exists(){
         TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_FILE}")
-        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
-          TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
-        fi
       fi
     elif [ -x "$(command -v yum)" ]; then
       if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ]; then
@@ -491,9 +488,6 @@ function is_tar_files_exists(){
         fi
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_CONTAINER_FILE}")
-        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
-          TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
-        fi
       else
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_FILE}")
       fi
