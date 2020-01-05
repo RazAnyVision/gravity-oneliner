@@ -3,7 +3,7 @@ set -e
 set -o pipefail
 
 # script version
-SCRIPT_VERSION="on-demand-hq-ha"
+SCRIPT_VERSION="on-demand-1.24.1"
 
 # Absolute path to this script
 SCRIPT=$(readlink -f "$0")
