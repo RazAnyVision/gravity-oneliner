@@ -3,37 +3,51 @@ set -e
 set -o pipefail
 
 # script version
-SCRIPT_VERSION="1.24.0-36"
+SCRIPT_VERSION="2.0.0-1"
 
 # Absolute path to this script
 SCRIPT=$(readlink -f "$0")
 # Absolute path to the script directory
 BASEDIR=$(dirname "$SCRIPT")
 
-NODE_ROLE="aio"
+NODE_ROLE="master"
 INSTALL_METHOD="online"
 LOG_FILE="/var/log/gravity-installer.log"
 S3_BUCKET_URL="https://gravity-bundles.s3.eu-central-1.amazonaws.com"
 INSTALL_RANCHER="true"
 
 # Gravity options
-K8S_BASE_NAME="anv-base-k8s"
-K8S_BASE_VERSION="1.0.13"
+K8S_BASE_NAME="gravity-base-k8s"
+K8S_BASE_VERSION="1.1.0"
 K8S_BASE_REPO_VERSION="${K8S_BASE_VERSION}"
 
-K8S_INFRA_NAME="k8s-infra"
-K8S_INFRA_VERSION="1.0.11"
+## Infra
+K8S_INFRA_NAME="infra-install-chart"
+K8S_INFRA_VERSION="1.1.0"
+K8S_INFRA_CHART_NAME="chart-${K8S_INFRA_NAME}"
+K8S_INFRA_BUNDLE_NAME="bundle-${K8S_INFRA_NAME}"
 K8S_INFRA_REPO_VERSION="${K8S_INFRA_VERSION}"
 
-PRODUCT_NAME="bettertomorrow"
-PRODUCT_VERSION="1.24.0-35"
-PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
+## Data
+K8S_DATA_NAME="core-data"
+K8S_DATA_VERSION="1.0.0"
+K8S_DATA_REPO_VERSION="${K8S_INFRA_VERSION}"
+
+## Init
+K8S_INIT_NAME="core-init"
+K8S_INIT_VERSION="1.0.0"
+K8S_INIT_REPO_VERSION="${K8S_INFRA_VERSION}"
 
 # NVIDIA driver options
 NVIDIA_DRIVER_METHOD="container"
-NVIDIA_DRIVER_VERSION="410-104"
-NVIDIA_DRIVER_PACKAGE_VERSION="1.0.1"
+NVIDIA_DRIVER_VERSION="440-44"
+NVIDIA_DRIVER_PACKAGE_VERSION="1.0.2"
 NVIDIA_DRIVER_REPO_VERSION="${NVIDIA_DRIVER_PACKAGE_VERSION}"
+
+## product
+PRODUCT_NAME="bettertomorrow"
+PRODUCT_VERSION="1.24.0-35"
+PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
 
 # UBUNTU Options
 APT_REPO_FILE_NAME="apt-repo-20190821.tar"
@@ -49,6 +63,8 @@ INSTALL_PRODUCT="false"
 ADVERTISE_IP="false"
 SKIP_K8S_BASE="false"
 SKIP_K8S_INFRA="false"
+SKIP_DATA="false"
+SKIP_INIT="false"
 SKIP_PRODUCT="false"
 SKIP_DRIVERS="false"
 SKIP_MD5_CHECK="false"
@@ -118,6 +134,8 @@ function showhelp {
    echo "  [--skip-k8s-base] Skip Kubernetes/Gravity base installation"
    echo "  [--skip-k8s-infra] Skip infrastructure layer installation"
    echo "  [--skip-drivers] Skip Nvidia drivers installation"
+   echo "  [--skip-data] Skip product/application installation"
+   echo "  [--skip-init] Skip product/application installation"
    echo "  [--skip-product] Skip product/application installation"
    echo "  [--skip-rancher] Skip Rancher installation"
    echo "  [--developer] Developer mode"
@@ -207,6 +225,16 @@ while test $# -gt 0; do
         ;;
         --auto-install-product)
             INSTALL_PRODUCT="true"
+        shift
+        continue
+        ;;
+        --skip-data)
+            SKIP_DATA="true"
+        shift
+        continue
+        ;;
+        --skip-init)
+            SKIP_INIT="true"
         shift
         continue
         ;;
@@ -403,7 +431,7 @@ function cidr_check() {
     echo "Run with --download-only -> CIDR overlap check skipped!"
     return 0
   fi
-  if [[ "$SKIP_CIDR" == "true" ]]; then
+  if [[ "$SKIP_CIDR" == "true" ]] || [[ "$SKIP_CLUSTER_CHECK" == "true" ]]; then
     echo "Run with --skip-cidr-check -> CIDR overlap check skipped!"
     return 0
   fi
@@ -466,7 +494,16 @@ function is_tar_files_exists(){
   fi
 
   if [ "${SKIP_K8S_INFRA}" == "false" ]; then
-    TAR_FILES_LIST+=("${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz")
+    TAR_FILES_LIST+=("${K8S_INFRA_CHART_NAME}-${K8S_INFRA_VERSION}.tar.gz")
+    TAR_FILES_LIST+=("${K8S_INFRA_BUNDLE_NAME}-${K8S_INFRA_VERSION}.tar")
+  fi
+
+  if [ "${SKIP_DATA}" == "false" ]; then
+    TAR_FILES_LIST+=("${K8S_DATA_NAME}-${K8S_DATA_VERSION}.tar.gz")
+  fi
+
+  if [ "${SKIP_INIT}" == "false" ]; then
+    TAR_FILES_LIST+=("${K8S_INIT_NAME}-${K8S_INIT_VERSION}.tar.gz")
   fi
 
   if [ "${SKIP_PRODUCT}" == "false" ]; then
@@ -479,9 +516,9 @@ function is_tar_files_exists(){
         TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_FILE}")
-        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
-          TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
-        fi
+        # if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+        #   TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
+        # fi
       fi
     elif [ -x "$(command -v yum)" ]; then
       if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ]; then
@@ -491,9 +528,9 @@ function is_tar_files_exists(){
         fi
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_CONTAINER_FILE}")
-        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
-          TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
-        fi
+        # if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+        #   TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
+        # fi
       else
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_FILE}")
       fi
@@ -548,14 +585,21 @@ function download_files() {
 
   K8S_BASE_URL="${S3_BUCKET_URL}/base-k8s/${K8S_BASE_NAME}/${K8S_BASE_REPO_VERSION}/${K8S_BASE_NAME}-${K8S_BASE_VERSION}.tar"
   K8S_BASE_MD5_URL="${S3_BUCKET_URL}/base-k8s/${K8S_BASE_NAME}/${K8S_BASE_REPO_VERSION}/${K8S_BASE_NAME}-${K8S_BASE_VERSION}.md5"
-  K8S_INFRA_URL="${S3_BUCKET_URL}/${K8S_INFRA_NAME}/${K8S_INFRA_REPO_VERSION}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz"
-  K8S_INFRA_MD5_URL="${S3_BUCKET_URL}/${K8S_INFRA_NAME}/${K8S_INFRA_REPO_VERSION}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.md5"
+  K8S_INFRA_CHART_URL="${S3_BUCKET_URL}/${K8S_INFRA_NAME}/${K8S_INFRA_REPO_VERSION}/${K8S_INFRA_CHART_NAME}-${K8S_INFRA_VERSION}.tar.gz"
+  K8S_INFRA_CHART_MD5_URL="${S3_BUCKET_URL}/${K8S_INFRA_NAME}/${K8S_INFRA_REPO_VERSION}/${K8S_INFRA_CHART_NAME}-${K8S_INFRA_VERSION}.md5"
+  K8S_INFRA_BUNDLE_URL="${S3_BUCKET_URL}/${K8S_INFRA_NAME}/${K8S_INFRA_REPO_VERSION}/${K8S_INFRA_BUNDLE_NAME}-${K8S_INFRA_VERSION}.tar"
+  K8S_INFRA_BUNDLE_MD5_URL="${S3_BUCKET_URL}/${K8S_INFRA_NAME}/${K8S_INFRA_REPO_VERSION}/${K8S_INFRA_BUNDLE_NAME}-${K8S_INFRA_VERSION}.md5"
+  K8S_DATA_URL="${S3_BUCKET_URL}/products/${K8S_DATA_NAME}/${K8S_DATA_REPO_VERSION}/${K8S_DATA_NAME}-${K8S_DATA_VERSION}.tar.gz"
+  K8S_DATA_MD5_URL="${S3_BUCKET_URL}/products/${K8S_DATA_NAME}/${K8S_DATA_REPO_VERSION}/${K8S_DATA_NAME}-${K8S_DATA_VERSION}.md5"    
+  K8S_INIT_URL="${S3_BUCKET_URL}/products/${K8S_INIT_NAME}/${K8S_INIT_REPO_VERSION}/${K8S_INIT_NAME}-${K8S_INIT_VERSION}.tar.gz"
+  K8S_INIT_MD5_URL="${S3_BUCKET_URL}/products/${K8S_INIT_NAME}/${K8S_INIT_REPO_VERSION}/${K8S_INIT_NAME}-${K8S_INIT_VERSION}.md5"  
   K8S_PRODUCT_URL="${S3_BUCKET_URL}/products/${PRODUCT_NAME}/${PRODUCT_REPO_VERSION}/${PRODUCT_NAME}-${PRODUCT_VERSION}.tar.gz"
   K8S_PRODUCT_MD5_URL="${S3_BUCKET_URL}/products/${PRODUCT_NAME}/${PRODUCT_REPO_VERSION}/${PRODUCT_NAME}-${PRODUCT_VERSION}.md5"
   K8S_PRODUCT_MIGRATION_URL="${S3_BUCKET_URL}/products/${PRODUCT_MIGRATION_NAME}/${PRODUCT_REPO_VERSION}/${PRODUCT_MIGRATION_NAME}-${PRODUCT_VERSION}.tar.gz"
   K8S_PRODUCT_MIGRATION_MD5_URL="${S3_BUCKET_URL}/products/${PRODUCT_MIGRATION_NAME}/${PRODUCT_REPO_VERSION}/${PRODUCT_MIGRATION_NAME}-${PRODUCT_VERSION}.md5"
 
   GRAVITY_PACKAGE_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/gravity_package_installer.sh"
+  BUNDLE_PACKAGE_INSTALL_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/bundle_package_installer.sh"
   YQ_URL="https://github.com/mikefarah/yq/releases/download/2.4.0/yq_linux_amd64"
   SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/install.sh"
   ADD_NETWORK_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/create_nic.sh"
@@ -570,7 +614,7 @@ function download_files() {
   fi
 
   ## SHARED PACKAGES TO DOWNLOAD
-  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${SCRIPT_URL}" "${ADD_NETWORK_SCRIPT_URL}" "${DELETE_NETWORK_SCRIPT_URL}")
+  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${BUNDLE_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${SCRIPT_URL}" "${ADD_NETWORK_SCRIPT_URL}" "${DELETE_NETWORK_SCRIPT_URL}")
 
   if [ ${SKIP_K8S_BASE} == "false" ]; then
     PACKAGES+=("${K8S_BASE_URL}")
@@ -578,8 +622,20 @@ function download_files() {
   fi
 
   if [ ${SKIP_K8S_INFRA} == "false" ]; then
-    PACKAGES+=("${K8S_INFRA_URL}")
-    PACKAGES+=("${K8S_INFRA_MD5_URL}")
+    PACKAGES+=("${K8S_INFRA_CHART_URL}")
+    PACKAGES+=("${K8S_INFRA_CHART_MD5_URL}")
+    PACKAGES+=("${K8S_INFRA_BUNDLE_URL}")
+    PACKAGES+=("${K8S_INFRA_BUNDLE_MD5_URL}")
+  fi
+
+  if [ ${SKIP_DATA} == "false" ]; then
+    PACKAGES+=("${K8S_DATA_URL}")
+    PACKAGES+=("${K8S_DATA_MD5_URL}")
+  fi
+
+  if [ ${SKIP_INIT} == "false" ]; then
+    PACKAGES+=("${K8S_INIT_URL}")
+    PACKAGES+=("${K8S_INIT_MD5_URL}")
   fi
 
   if [ ${SKIP_PRODUCT} == "false" ]; then
@@ -880,16 +936,60 @@ function install_gravity_app() {
   ${BASEDIR}/gravity_package_installer.sh "${PACKAGE_FILE}" "$@" | tee -a ${LOG_FILE}
 }
 
+function install_gravity_bundle() {
+  PACKAGE_FILE="${1}"
+  PACKAGE_VERSION="${2}"
+  shift
+  ${BASEDIR}/bundle_package_installer.sh "${PACKAGE_FILE}" "${PACKAGE_VERSION}" "$@" | tee -a ${LOG_FILE}
+}
+
+
+function node_labels() {
+  # add node labels to the first master
+  kubectl label nodes $(kubectl get node -l "node-role.kubernetes.io/master=master" -o 'jsonpath={.items[0].status.addresses[?(@.type=="Hostname")].address}') \
+    edge=true \
+    backend=true \
+    frontend=true \
+    monitor=true \
+    nvidia-driver=true || true
+}
+
 function install_k8s_infra_app() {
   echo "" | tee -a ${LOG_FILE}
   echo "=====================================================================" | tee -a ${LOG_FILE}
   echo "==                Installing infra chart...                        ==" | tee -a ${LOG_FILE}
   echo "=====================================================================" | tee -a ${LOG_FILE}
   echo "" | tee -a ${LOG_FILE}
-  if [[ "${SKIP_K8S_INFRA}" == "false" ]] && [[ -f "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" ]]; then
-    install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" --env=rancher="${INSTALL_RANCHER}"
+  if [[ "${SKIP_K8S_INFRA}" == "false" ]]; then
+    install_gravity_bundle "${K8S_INFRA_NAME}" "${K8S_INFRA_VERSION}" --set extraEnvironmentVars.RANCHER="${INSTALL_RANCHER}"
   else
     echo "### Skipping installing infra charts .." | tee -a ${LOG_FILE}
+  fi
+}
+
+function install_data_app() {
+  echo "" | tee -a ${LOG_FILE}
+  echo "=====================================================================" | tee -a ${LOG_FILE}
+  echo "==                 Installing data chart...                        ==" | tee -a ${LOG_FILE}
+  echo "=====================================================================" | tee -a ${LOG_FILE}
+  echo "" | tee -a ${LOG_FILE}
+  if [[ "${SKIP_DATA}" == "false" ]] && [[ -f "${BASEDIR}/${K8S_DATA_NAME}-${K8S_DATA_VERSION}.tar.gz" ]]; then
+    install_gravity_app "${BASEDIR}/${K8S_DATA_NAME}-${K8S_DATA_VERSION}.tar.gz"
+  else
+    echo "### Skipping installing product charts .." | tee -a ${LOG_FILE}
+  fi
+}
+
+function install_init_app() {
+  echo "" | tee -a ${LOG_FILE}
+  echo "=====================================================================" | tee -a ${LOG_FILE}
+  echo "==                 Installing init chart...                        ==" | tee -a ${LOG_FILE}
+  echo "=====================================================================" | tee -a ${LOG_FILE}
+  echo "" | tee -a ${LOG_FILE}
+  if [[ "${SKIP_INIT}" == "false" ]] && [[ -f "${BASEDIR}/${K8S_INIT_NAME}-${K8S_INIT_VERSION}.tar.gz" ]]; then
+    install_gravity_app "${BASEDIR}/${K8S_INIT_NAME}-${K8S_INIT_VERSION}.tar.gz"
+  else
+    echo "### Skipping installing product charts .." | tee -a ${LOG_FILE}
   fi
 }
 
@@ -1013,6 +1113,7 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
     sed -i "/ExecStop=/aExecStopPost=\/bin\/bash remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
   fi
   #create_admin
+  node_labels
   restore_secrets
   restore_sw_filer_data
   install_k8s_infra_app
@@ -1039,6 +1140,7 @@ else
     sed -i "/ExecStop=/aExecStopPost=\/bin\/bash remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
   fi
   #create_admin
+  node_labels
   restore_secrets
   restore_sw_filer_data
   install_k8s_infra_app
