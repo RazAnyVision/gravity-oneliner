@@ -27,7 +27,7 @@ K8S_INFRA_VERSION="1.0.11"
 K8S_INFRA_REPO_VERSION="${K8S_INFRA_VERSION}"
 
 PRODUCT_NAME="bettertomorrow"
-PRODUCT_VERSION="1.24.0-33"
+PRODUCT_VERSION="1.24.0-35"
 PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
 
 # NVIDIA driver options
@@ -38,14 +38,16 @@ NVIDIA_DRIVER_REPO_VERSION="${NVIDIA_DRIVER_PACKAGE_VERSION}"
 
 # UBUNTU Options
 APT_REPO_FILE_NAME="apt-repo-20190821.tar"
-
+MD5_APT_REPO_FILE_NAME="${APT_REPO_FILE_NAME%%.*}.md5"
 # RHEL/CENTOS options
 RHEL_PACKAGES_FILE_NAME="rhel-packages-20190923.tar"
+MD5_RHEL_PACKAGES_FILE_NAME="${RHEL_PACKAGES_FILE_NAME%%.*}.md5"
 RHEL_NVIDIA_DRIVER_URL="http://us.download.nvidia.com/XFree86/Linux-x86_64/410.104/NVIDIA-Linux-x86_64-410.104.run"
 RHEL_NVIDIA_DRIVER_FILE="${RHEL_NVIDIA_DRIVER_URL##*/}"
 
 DEVELOPER_MODE="false"
 INSTALL_PRODUCT="false"
+ADVERTISE_IP="false"
 SKIP_K8S_BASE="false"
 SKIP_K8S_INFRA="false"
 SKIP_PRODUCT="false"
@@ -55,7 +57,14 @@ DOWNLOAD_ONLY="false"
 FORCE_DOWNLOAD="false"
 SKIP_CLUSTER_CHECK="false"
 MIGRATION_EXIST="false"
+ENABLE_LOCAL_REPO="false"
 HIGH_AVAILABILTY="false"
+
+# Network options
+POD_NETWORK_CIDR="10.244.0.0/16"
+SERVICE_CIDR="10.172.0.0/16"
+SKIP_CIDR="false"
+
 
 echo "------ Staring Gravity installer $(date '+%Y-%m-%d %H:%M:%S')  ------" >${LOG_FILE} 2>&1
 
@@ -67,7 +76,7 @@ if [[ ${EUID} -ne 0 ]]; then
 fi
 
 ## Get home Dir of the current user
-if [ ${SUDO_USER} ]; then
+if [ "${SUDO_USER}" ]; then
   user=${SUDO_USER}
 else
   user=`whoami`
@@ -87,24 +96,27 @@ function showhelp {
    echo "  [-r|--node-role] Current node role [aio|backend|edge] (default: aio)"
    echo "  [-m|--install-method] Installation method [online|airgap] (default: online)"
    echo "  [-p|--product-name] Product name to install"
-   echo "  [-v|--product-version] Product version to install [Default: ${PRODUCT_VERSION}]"
+   echo "  [-v|--product-version] Product version to install (default: ${PRODUCT_VERSION})"
    echo "  [--product-repo-version] Product repo version to install (default: ${PRODUCT_VERSION})"
    echo "  [--download-only] Download all the required installation files (to ${BASEDIR})"
    echo "  [--force-download] Allow overwrite scripts if exist"
    echo "  [--high-availabilty] High Availability Deployment [false|true] (default: $HIGH_AVAILABILTY)"
    echo "  [--os-package] Select OS package to download, Force download only [redhat|ubuntu] (default: machine OS)"
    echo "  [--download-dashboard] Download product dashboard (to ${BASEDIR})"
-   echo "  [--auto-install-product] Auto deploy application after installation (from Rancher catalog)"
-   echo "  [--add-migration-chart] Auto deploy migration after installation (from Rancher catalog)"   
    echo "  [--base-url] Base URL for downloading the installation files (default: https://gravity-bundles.s3.eu-central-1.amazonaws.com)"
-   echo "  [--k8s-base-version] Kubernetes/Gravity base version (default: ${K8S_BASE_VERSION})"
-   echo "  [--k8s-base-repo-version] Kubernetes/Gravity repo version (default: ${K8S_BASE_VERSION})"
-   echo "  [--k8s-infra-version] Infrastructure layer version (default: ${K8S_INFRA_VERSION})"
-   echo "  [--k8s-infra-repo-version] Infrastructure repo version (default: ${K8S_INFRA_VERSION})"
+   echo "  [--auto-install-product] Auto deploy application after installation (from Rancher catalog)"
+   echo "  [--add-migration-chart] Auto deploy migration after installation (from Rancher catalog)"
+   echo "  [--k8s-base-repo-version] Kubernetes/Gravity base version (default: ${K8S_BASE_VERSION})"
+   echo "  [--k8s-infra-repo-version] Infrastructure layer version (default: ${K8S_INFRA_VERSION})"
+   echo "  [--skip-cidr-check] Force install without checking CIDR overlap"
+   # commented below - feature disabled until we can send those params to the preflight.sh script as well
+   # echo "  [--pod-network-cidr] Config pod network CIDR [Default: ${POD_NETWORK_CIDR}]"
+   # echo "  [--service-cidr] Config service CIDR [Default: ${SERVICE_CIDR}]"
    echo "  [--driver-method] Nvidia driver installation method [host|container] (default: ${NVIDIA_DRIVER_METHOD})"
    echo "  [--driver-version] Nvidia driver version (requires --driver-method=container) [410-104|418-113] (default: ${NVIDIA_DRIVER_VERSION})"
    echo "  [--driver-package-version] Nvidia driver package version (default: ${NVIDIA_DRIVER_PACKAGE_VERSION})"
    echo "  [--driver-repo-version] Nvidia driver repo version (default: ${NVIDIA_DRIVER_PACKAGE_VERSION})"
+   echo "  [--enable-local-repo] force the download of the repo package file (and deploy it when spcify with airgap mode)"
    echo "  [--skip-cluster-check] Skip existing cluster check"
    echo "  [--skip-md5-check] Skip MD5 checksum"
    echo "  [--skip-k8s-base] Skip Kubernetes/Gravity base installation"
@@ -114,6 +126,7 @@ function showhelp {
    echo "  [--skip-rancher] Skip Rancher installation"
    echo "  [--metallb-address] Apply metalLB installation, with address"
    echo "  [--developer] Developer mode"
+   echo "  [--advertise-ip] IP address of network interface to install on"
    echo ""
 }
 
@@ -178,7 +191,6 @@ while test $# -gt 0; do
         shift
             K8S_INFRA_VERSION=${1:-$K8S_INFRA_VERSION}
         shift
-        
         continue
         ;;
         --skip-k8s-infra)
@@ -231,6 +243,11 @@ while test $# -gt 0; do
         ;;
         --download-dashboard)
             DASHBOARD_EXIST="true"
+        shift
+        continue
+        ;;
+        --enable-local-repo)
+            ENABLE_LOCAL_REPO="true"
         shift
         continue
         ;;
@@ -294,6 +311,30 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --skip-cidr-check)
+            SKIP_CIDR="true"
+        shift
+        continue
+        ;;
+        --advertise-ip)
+        shift
+            ADVERTISE_IP=${1:-$ADVERTISE_IP}
+        shift
+        continue
+        ;;
+        # commented below - feature disabled until we can send those params to the preflight.sh script as well
+        #--pod-network-cidr)
+        #shift
+        #    POD_NETWORK_CIDR=${1:-$POD_NETWORK_CIDR}
+        #shift
+        #continue
+        #;;
+        #--service-cidr)
+        #shift
+        #    SERVICE_CIDR=${1:-$SERVICE_CIDR}
+        #shift
+        #continue
+        #;;
         --high-availabilty)
         shift
             HIGH_AVAILABILTY=${1:-$HIGH_AVAILABILTY}
@@ -313,13 +354,103 @@ done
 # evaluate variables after providing script arguments
 PRODUCT_MIGRATION_NAME="migration-workflow-${PRODUCT_NAME}"
 RHEL_PACKAGES_FILE_URL="${S3_BUCKET_URL}/repos/${RHEL_PACKAGES_FILE_NAME}"
+RHEL_PACKAGES_FILE_URL_MD5="${S3_BUCKET_URL}/repos/${MD5_RHEL_PACKAGES_FILE_NAME}"
 APT_REPO_FILE_URL="${S3_BUCKET_URL}/repos/${APT_REPO_FILE_NAME}"
+APT_REPO_FILE_URL_MD5="${S3_BUCKET_URL}/repos/${MD5_APT_REPO_FILE_NAME}"
+
 UBUNTU_NVIDIA_DRIVER_CONTAINER_URL="${S3_BUCKET_URL}/nvidia-driver/${NVIDIA_DRIVER_REPO_VERSION}/nvidia-driver-${NVIDIA_DRIVER_VERSION}-ubuntu1804-${NVIDIA_DRIVER_PACKAGE_VERSION}.tar.gz"
 UBUNTU_NVIDIA_DRIVER_CONTAINER_MD5_URL="${S3_BUCKET_URL}/nvidia-driver/${NVIDIA_DRIVER_REPO_VERSION}/nvidia-driver-${NVIDIA_DRIVER_VERSION}-ubuntu1804-${NVIDIA_DRIVER_PACKAGE_VERSION}.md5"
 RHEL_NVIDIA_DRIVER_CONTAINER_URL="${S3_BUCKET_URL}/nvidia-driver/${NVIDIA_DRIVER_REPO_VERSION}/nvidia-driver-${NVIDIA_DRIVER_VERSION}-rhel7-${NVIDIA_DRIVER_PACKAGE_VERSION}.tar.gz"
 RHEL_NVIDIA_DRIVER_CONTAINER_MD5_URL="${S3_BUCKET_URL}/nvidia-driver/${NVIDIA_DRIVER_REPO_VERSION}/nvidia-driver-${NVIDIA_DRIVER_VERSION}-rhel7-${NVIDIA_DRIVER_PACKAGE_VERSION}.md5"
 UBUNTU_NVIDIA_DRIVER_CONTAINER_FILE="${UBUNTU_NVIDIA_DRIVER_CONTAINER_URL##*/}"
 RHEL_NVIDIA_DRIVER_CONTAINER_FILE="${RHEL_NVIDIA_DRIVER_CONTAINER_URL##*/}"
+
+function cidr_overlap() { (
+  #check local cidr - This function was copied from the internet!
+  subnet1="$1"
+  subnet2="$2"
+
+  # calculate min and max of subnet1
+  # calculate min and max of subnet2
+  # find the common range (check_overlap)
+  # print it if there is one
+
+  read_range () {
+    IFS=/ read ip mask <<<"$1"
+    IFS=. read -a octets <<< "$ip";
+    set -- "${octets[@]}";
+    min_ip=$(($1*256*256*256 + $2*256*256 + $3*256 + $4));
+    host=$((32-mask))
+    max_ip=$(($min_ip+(2**host)-1))
+    printf "%d-%d\n" "$min_ip" "$max_ip"
+  }
+
+  check_overlap () {
+    IFS=- read min1 max1 <<<"$1";
+    IFS=- read min2 max2 <<<"$2";
+    if [ "$max1" -lt "$min2" ] || [ "$max2" -lt "$min1" ]; then return; fi
+    [ "$max1" -ge "$max2" ] && max="$max2" ||   max="$max1"
+    [ "$min1" -le "$min2" ] && min="$min2" || min="$min1"
+    printf "%s-%s\n" "$(to_octets $min)" "$(to_octets $max)"
+  }
+
+  to_octets () {
+    first=$(($1>>24))
+    second=$((($1&(256*256*255))>>16))
+    third=$((($1&(256*255))>>8))
+    fourth=$(($1&255))
+    printf "%d.%d.%d.%d\n" "$first" "$second" "$third" "$fourth"
+  }
+
+  range1="$(read_range $subnet1)"
+  range2="$(read_range $subnet2)"
+  overlap="$(check_overlap $range1 $range2)"
+  [ -n "$overlap" ] && echo "Overlap $overlap of $subnet1 and $subnet2"
+
+  # if cidr equal to install parameters exit 1 + echo notice to user
+) }
+
+function cidr_check() {
+  # This function:
+  # checks if "DOWNLOAD_ONLY=true" is so returns normally
+  # checks if there is CIDR overlap with local network
+  # if there is an overlap it prints the details and terminates install script befor making changes
+
+  if [[ "$DOWNLOAD_ONLY" == "true" ]]; then
+    echo "Run with --download-only -> CIDR overlap check skipped!"
+    return 0
+  fi
+  if [[ "$SKIP_CIDR" == "true" ]]; then
+    echo "Run with --skip-cidr-check -> CIDR overlap check skipped!"
+    return 0
+  fi
+  # evaluates the list of subnets using the "ip route" command and comparing each subnet to CIDR in use
+  CIDR_LIST=$(ip route | cut -d' ' -f1)
+  for network in $CIDR_LIST; do
+    if [[ $network != "default" ]]; then
+        # solve issue when mask is /32 and does not show in the ip route correctly
+        IFS=/ read ip mask <<<"$network"
+        if [[ ${mask} ]];then echo "OK"
+          else
+            network="$network/24"
+            echo $network
+        fi
+        # calling function cidr_overlap to evaluate
+        if [[ $( cidr_overlap ${POD_NETWORK_CIDR} ${network} ) ]]; then
+          echo "Pods network CIDR Exist in network environment!!! Install terminated - nothing was done."
+          cidr_overlap ${POD_NETWORK_CIDR} ${network}
+          #echo "To run with custom CIDR use --pod-network-cidr"
+          exit 1
+        fi
+        if [[ $( cidr_overlap ${SERVICE_CIDR} ${network} ) ]]; then
+          echo "Service CIDR Exist in network environment!!! Install terminated - nothing was done."
+          cidr_overlap ${SERVICE_CIDR} ${network}
+          #echo "To run with custom CIDR use --service-cidr"
+          exit 1
+        fi
+    fi
+  done
+}
 
 function is_kubectl_exists() {
   if [ "${SKIP_CLUSTER_CHECK}" == "false" ]; then
@@ -361,20 +492,37 @@ function is_tar_files_exists(){
 
   if [ "${SKIP_DRIVERS}" == "false" ]; then
     if [ -x "$(command -v apt-get)" ]; then
-      if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ]; then
+      if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ] && [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
         TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_FILE}")
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
+        fi
       fi
     elif [ -x "$(command -v yum)" ]; then
       if [ "${INSTALL_METHOD}" == "airgap" ] && [ "${NVIDIA_DRIVER_METHOD}" == "host" ]; then
-        TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}" "${RHEL_NVIDIA_DRIVER_FILE}")
+        TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_FILE}")
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
+        fi
       elif [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_CONTAINER_FILE}")
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
+        fi
       else
         TAR_FILES_LIST+=("${RHEL_NVIDIA_DRIVER_FILE}")
       fi
     fi
+  fi
+
+  if [ "${ENABLE_LOCAL_REPO}" == "true" ]; then
+        if [ -x "$(command -v apt-get)" ]; then
+          TAR_FILES_LIST+=("${APT_REPO_FILE_NAME}")
+        elif [ -x "$(command -v yum)" ]; then
+          TAR_FILES_LIST+=("${RHEL_PACKAGES_FILE_NAME}")
+        fi
   fi
 
   for file in "${TAR_FILES_LIST[@]}"; do
@@ -434,6 +582,8 @@ function download_files() {
   CLEAN_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/clean.sh"
   JOIN_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/join_node.sh"
   SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/install.sh"
+  ADD_NETWORK_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/create_nic.sh"
+  DELETE_NETWORK_SCRIPT_URL="https://raw.githubusercontent.com/AnyVisionltd/gravity-oneliner/${SCRIPT_VERSION}/remove_nic.sh"
 
   if [ "${PRODUCT_NAME}" == "bettertomorrow" ]; then
     DASHBOARD_URL="https://s3.eu-central-1.amazonaws.com/anyvision-dashboard/1.24.0/AnyVision-1.24.0-linux-x86_64.AppImage"
@@ -444,7 +594,7 @@ function download_files() {
   fi
 
   ## SHARED PACKAGES TO DOWNLOAD
-  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${JQ_URL}" "${SCRIPT_URL}" "${CLEAN_SCRIPT_URL}" "${JOIN_SCRIPT_URL}")
+  declare -a PACKAGES=("${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL}" "${YQ_URL}" "${JQ_URL}" "${SCRIPT_URL}" "${CLEAN_SCRIPT_URL}" "${JOIN_SCRIPT_URL}" "${ADD_NETWORK_SCRIPT_URL}" "${DELETE_NETWORK_SCRIPT_URL}")
 
   if [ ${SKIP_K8S_BASE} == "false" ]; then
     PACKAGES+=("${K8S_BASE_URL}")
@@ -474,16 +624,31 @@ function download_files() {
       if [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         PACKAGES+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_URL}")
         PACKAGES+=("${UBUNTU_NVIDIA_DRIVER_CONTAINER_MD5_URL}")
-      else
+      elif [[ "${ENABLE_LOCAL_REPO}" == "false" ]] && [[ "${NVIDIA_DRIVER_METHOD}" == "host" ]]; then
         PACKAGES+=("${APT_REPO_FILE_URL}")
+        PACKAGES+=("${APT_REPO_FILE_URL_MD5}")
       fi
     elif [[ "${OS_PACKAGE}" == "redhat" ]] || [[ -x "$(command -v yum)" && -z "${OS_PACKAGE}" ]]; then
       if [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
         PACKAGES+=("${RHEL_NVIDIA_DRIVER_CONTAINER_URL}")
         PACKAGES+=("${RHEL_NVIDIA_DRIVER_CONTAINER_MD5_URL}")
       else
-        PACKAGES+=("${RHEL_PACKAGES_FILE_URL}" "${RHEL_NVIDIA_DRIVER_URL}")
+        PACKAGES+=("${RHEL_NVIDIA_DRIVER_URL}")
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          PACKAGES+=("${RHEL_PACKAGES_FILE_URL}")
+          PACKAGES+=("${RHEL_PACKAGES_FILE_URL_MD5}")
+        fi
       fi
+    fi
+  fi
+
+  if [ "${ENABLE_LOCAL_REPO}" == "true" ];then
+    if [[ "${OS_PACKAGE}" == "ubuntu" ]] || [[ -x "$(command -v apt-get)" && -z "${OS_PACKAGE}" ]]; then
+      PACKAGES+=("${APT_REPO_FILE_URL}")
+      PACKAGES+=("${APT_REPO_FILE_URL_MD5}")
+    elif [[ "${OS_PACKAGE}" == "redhat" ]] || [[ -x "$(command -v yum)" && -z "${OS_PACKAGE}" ]]; then
+      PACKAGES+=("${RHEL_PACKAGES_FILE_URL}")
+      PACKAGES+=("${RHEL_PACKAGES_FILE_URL_MD5}")
     fi
   fi
 
@@ -493,9 +658,9 @@ function download_files() {
 
   # remove old scripts if exist before download
   if [ ${FORCE_DOWNLOAD} == "true" ]; then
-    rm -f ${BASEDIR}/${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL##*/} ${BASEDIR}/${SCRIPT_URL##*/} 
+    rm -f ${BASEDIR}/${GRAVITY_PACKAGE_INSTALL_SCRIPT_URL##*/} ${BASEDIR}/${SCRIPT_URL##*/}
   fi
-  
+
   # remove old md5 files
   for url in "${PACKAGES[@]}"; do
     filename=$(echo "${url##*/}")
@@ -539,7 +704,7 @@ function download_files() {
     cp -n jq-linux64 jq
   fi
 
-  chmod +x ${BASEDIR}/yq* ${BASEDIR}/jq* ${BASEDIR}/*.sh 
+  chmod +x ${BASEDIR}/yq* ${BASEDIR}/jq* ${BASEDIR}/*.sh
 }
 
 function online_packages_installation() {
@@ -565,8 +730,19 @@ function online_packages_installation() {
   echo "#### Done installing packages." | tee -a ${LOG_FILE}
 }
 
-function create_yum_local_repo() {
-    cat >  /etc/yum.repos.d/local.repo <<EOF
+function enable_local_repo() {
+    local distro=$1
+    if [ "${distro}" == "ubuntu" ]; then
+      mkdir -p /opt/packages >>${LOG_FILE} 2>&1
+      tar -xf ${BASEDIR}/${APT_REPO_FILE_NAME} -C /opt/packages >>${LOG_FILE} 2>&1
+      mkdir -p /etc/apt-orig >>${LOG_FILE} 2>&1
+      rsync -q -a --ignore-existing /etc/apt/ /etc/apt-orig/ >>${LOG_FILE} 2>&1
+      rm -rf /etc/apt/sources.list.d/* >>${LOG_FILE} 2>&1
+      echo "deb [arch=amd64 trusted=yes allow-insecure=yes] http://$(hostname --ip-address | awk '{print $1}'):8085/ bionic main" > /etc/apt/sources.list
+    else
+      mkdir -p /opt/packages/public >>${LOG_FILE} 2>&1
+      tar -xf ${BASEDIR}/${RHEL_PACKAGES_FILE_NAME} -C /opt/packages/public >>${LOG_FILE} 2>&1
+      cat >  /etc/yum.repos.d/local.repo <<EOF
 [local]
 name=local
 baseurl=http://localhost:8085
@@ -574,8 +750,8 @@ enabled=1
 gpgcheck=0
 protect=0
 EOF
+    fi
 }
-
 function nvidia_drivers_container_installation() {
   echo "" | tee -a ${LOG_FILE}
   echo "=====================================================================" | tee -a ${LOG_FILE}
@@ -619,12 +795,10 @@ function nvidia_drivers_installation() {
         apt-key adv --fetch-keys http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub >>${LOG_FILE} 2>&1
         sh -c 'echo "deb http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64 /" > /etc/apt/sources.list.d/cuda.list'
       else
-        mkdir -p /opt/packages >>${LOG_FILE} 2>&1
-        tar -xf ${BASEDIR}/${APT_REPO_FILE_NAME} -C /opt/packages >>${LOG_FILE} 2>&1
-        mkdir -p /etc/apt-orig >>${LOG_FILE} 2>&1
-        rsync -q -a --ignore-existing /etc/apt/ /etc/apt-orig/ >>${LOG_FILE} 2>&1
-        rm -rf /etc/apt/sources.list.d/* >>${LOG_FILE} 2>&1
-        echo "deb [arch=amd64 trusted=yes allow-insecure=yes] http://$(hostname --ip-address | awk '{print $1}'):8085/ bionic main" > /etc/apt/sources.list
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          enable_local_repo "ubuntu"
+        fi
+
       fi
       apt-get update>>${LOG_FILE} 2>&1
       apt-get install -y --no-install-recommends cuda-drivers=410.104-1 >>${LOG_FILE} 2>&1
@@ -658,9 +832,9 @@ function nvidia_drivers_installation() {
       if [[ "${INSTALL_METHOD}" == "online" ]]; then
         yum install -y gcc kernel-devel-$(uname -r) kernel-headers-$(uname -r) >>${LOG_FILE} 2>&1
       else
-        mkdir -p /opt/packages/public >>${LOG_FILE} 2>&1
-        tar -xf ${BASEDIR}/${RHEL_PACKAGES_FILE_NAME} -C /opt/packages/public >>${LOG_FILE} 2>&1
-        create_yum_local_repo
+        if [ "${ENABLE_LOCAL_REPO}" == "false" ]; then
+          enable_local_repo "rhel"
+        fi
         yum install --disablerepo='*' --enablerepo='local' -y gcc kernel-devel-$(uname -r) kernel-headers-$(uname -r) >>${LOG_FILE} 2>&1
       fi
       chmod +x ${BASEDIR}/${RHEL_NVIDIA_DRIVER_FILE} >>${LOG_FILE} 2>&1
@@ -685,15 +859,28 @@ function install_gravity() {
     tar -xf "${BASEDIR}/${K8S_BASE_NAME}-${K8S_BASE_VERSION}.tar" -C "${BASEDIR}/${DIR_K8S_BASE}" | tee -a ${LOG_FILE}
 
     cd ${BASEDIR}/${DIR_K8S_BASE}
-    ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
-        --cloud-provider=generic \
-        --pod-network-cidr="10.244.0.0/16" \
-        --service-cidr="10.172.0.0/16" \
-        --service-uid=5000 \
-        --vxlan-port=8472 \
-        --cluster=cluster.local \
-        --flavor=${NODE_ROLE} \
-        --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    if [[ "${ADVERTISE_IP}" == "false" ]]; then
+      ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
+          --cloud-provider=generic \
+          --pod-network-cidr="10.244.0.0/16" \
+          --service-cidr="10.172.0.0/16" \
+          --service-uid=5000 \
+          --vxlan-port=8472 \
+          --cluster=cluster.local \
+          --flavor=${NODE_ROLE} \
+          --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    else
+      ${BASEDIR}/${DIR_K8S_BASE}/gravity install \
+          --cloud-provider=generic \
+          --pod-network-cidr="10.244.0.0/16" \
+          --service-cidr="10.172.0.0/16" \
+          --service-uid=5000 \
+          --vxlan-port=8472 \
+          --cluster=cluster.local \
+          --advertise-addr=${ADVERTISE_IP} \
+          --flavor=${NODE_ROLE} \
+          --role=${NODE_ROLE} | tee -a ${LOG_FILE}
+    fi
     cd ${BASEDIR}
 
     create_admin
@@ -740,14 +927,14 @@ function install_k8s_infra_app() {
         INFRA_STEPS+=("--env=ha=true")
      fi
      if [ "$METALLB_ADDRESS" != "null" ]; then
-        INFRA_STEPS+=("--env=metallb_address=$METALLB_ADDRESS") 
+        INFRA_STEPS+=("--env=metallb_address=$METALLB_ADDRESS")
      fi
         JOIN_INFRA_STEPS=$(join_by " " "${INFRA_STEPS[@]}")
         install_gravity_app "${BASEDIR}/${K8S_INFRA_NAME}-${K8S_INFRA_VERSION}.tar.gz" $JOIN_INFRA_STEPS
   else
       echo "### Skipping installing infra charts .." | tee -a ${LOG_FILE}
   fi
-       
+
 }
 
 function install_product_app() {
@@ -833,14 +1020,24 @@ function developer_env_install() {
   fi
   echo "" | tee -a ${LOG_FILE}
   echo "Installing Tilt..." | tee -a ${LOG_FILE}
-  curl -fsSL https://raw.githubusercontent.com/windmilleng/tilt/master/scripts/install.sh | bash 
+  curl -fsSL https://raw.githubusercontent.com/windmilleng/tilt/master/scripts/install.sh | bash
   echo "" | tee -a ${LOG_FILE}
+  gravity exec sed -i 's/--iptables=false//' /usr/lib/systemd/system/docker.service >>${LOG_FILE} 2>&1
+  gravity exec systemctl daemon-reload >>${LOG_FILE} 2>&1
+  gravity exec systemctl restart docker.service >>${LOG_FILE} 2>&1
   #echo "Cloning tilt git repo to /tmp/tilt" | tee -a ${LOG_FILE}
   #git clone git@github.com:AnyVisionltd/tilt.git /tmp/tilt >>${LOG_FILE} 2>&1
 
 }
 
 echo "Installing ${NODE_ROLE} node with method ${INSTALL_METHOD}" | tee -a ${LOG_FILE}
+echo "Checking server environment before installing"
+
+if ping -c 2 -w 5 "${ADVERTISE_IP}" &> /dev/null; then
+  echo "Advertise IP is already taken! please choose another IP. Exiting now."
+  exit 0
+fi
+cidr_check
 
 if [[ "${INSTALL_METHOD}" == "online" ]]; then
   online_packages_installation
@@ -852,7 +1049,16 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
   is_kubectl_exists
   #is_tar_files_exists
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
+  if [[ "${ADVERTISE_IP}" != "false" ]]; then
+    cp "${BASEDIR}/create_nic.sh" "${BASEDIR}/remove_nic.sh" /usr/bin/
+    /bin/bash create_nic.sh "${ADVERTISE_IP}"
+  fi
   install_gravity
+  if [[ "${ADVERTISE_IP}" != "false" ]]; then
+    SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
+    sed -i "/ExecStart=/aExecStartPost=\/bin\/bash create_nic.sh ${ADVERTISE_IP}" /etc/systemd/system/$SERVICE_NAME
+    sed -i "/ExecStop=/aExecStopPost=\/bin\/bash remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
+  fi
   #create_admin
   restore_secrets
   restore_sw_filer_data
@@ -869,11 +1075,28 @@ else
   is_kubectl_exists
   is_tar_files_exists
   chmod +x ${BASEDIR}/yq* ${BASEDIR}/*.sh
+  if [[ "${ADVERTISE_IP}" != "false" ]]; then
+    cp "${BASEDIR}/create_nic.sh" "${BASEDIR}/remove_nic.sh" /usr/bin/
+    /bin/bash create_nic.sh "${ADVERTISE_IP}"
+  fi
   install_gravity
+  if [[ "${ADVERTISE_IP}" != "false" ]]; then
+    SERVICE_NAME=$(systemctl | grep gcr | awk '{print $1}')
+    sed -i "/ExecStart=/aExecStartPost=\/bin\/bash create_nic.sh ${ADVERTISE_IP}" /etc/systemd/system/$SERVICE_NAME
+    sed -i "/ExecStop=/aExecStopPost=\/bin\/bash remove_nic.sh" /etc/systemd/system/$SERVICE_NAME
+  fi
   #create_admin
   restore_secrets
   restore_sw_filer_data
   install_k8s_infra_app
+  if [ "${ENABLE_LOCAL_REPO}" == "true" ]; then
+    if [ -x "$(command -v apt-get)" ]; then
+      enable_local_repo "ubuntu"
+    elif [ -x "$(command -v yum)" ]; then
+      enable_local_repo "rhel"
+    fi
+  fi
+
   if [ "${SKIP_DRIVERS}" == "false" ]; then
     if [ "${NVIDIA_DRIVER_METHOD}" == "container" ]; then
       nvidia_drivers_container_installation
@@ -895,4 +1118,3 @@ echo "==========================================================================
 if [ ${nvidia_installed} ]; then
   echo "                  New nvidia driver has been installed, Reboot is required!               " | tee -a ${LOG_FILE}
 fi
-

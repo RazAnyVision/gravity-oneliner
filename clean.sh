@@ -68,7 +68,7 @@ function backup_consul_data {
     set +e
     consul_pod=`kubectl get pods -A | egrep "consul-server|consul-dc01" | awk '{print $2}'`
     set -e
-    if [ ${consul_pod} != "" ]; then
+    if [[ ${consul_pod} != "" ]]; then
       snapshot_dir="/ssd/consul_data"
       mkdir -p $snapshot_dir
       snapshot_file="consul-backup.snap"
@@ -218,24 +218,28 @@ function disable_docker {
     echo "######################################"
     systemctl stop docker
     systemctl is-enabled --quiet docker && echo "#### Disabling Docker service..." && systemctl disable docker
-    if [ -x "$(command -v apt)" ]; then
-      apt remove -y --purge 'docker*' 'container*'
-      apt autoremove -y
-    elif [ -x "$(command -v yum)" ]; then
-      yum remove -y 'docker*' 'container*'
-      yum autoremove -y
-    fi
-    if [ -d "/var/lib/docker" ]; then
-      rm -rf /var/lib/docker
-    fi
-    if [ -f /usr/local/bin/docker-compose ]; then
-      echo "######################################"
-      echo "# Removing docker-compose. . .       #"
-      echo "######################################"
-      rm -f /usr/local/bin/docker-compose
-    fi
   else
     echo "#### docker does not exists or is disabled, skipping docker service disabling phase."
+  fi
+}
+
+
+function purge_docker {
+  if [ -x "$(command -v apt)" ]; then
+    apt remove -y --purge 'docker*' 'container*'
+    apt autoremove -y
+  elif [ -x "$(command -v yum)" ]; then
+    yum remove -y 'docker*' 'container*'
+    yum autoremove -y
+  fi
+  if [ -d "/var/lib/docker" ]; then
+    rm -rf /var/lib/docker
+  fi
+  if [ -f /usr/local/bin/docker-compose ]; then
+    echo "######################################"
+    echo "# Removing docker-compose. . .       #"
+    echo "######################################"
+    rm -f /usr/local/bin/docker-compose
   fi
 }
 
@@ -252,8 +256,9 @@ while test $# -gt 0; do
         backup_pv_id
         backup_consul_data
         disable_k8s
-        remove_nvidia_docker
         disable_docker       
+        remove_nvidia_docker
+        purge_docker
         remove_nvidia_drivers
         shift
         continue
@@ -281,6 +286,7 @@ while test $# -gt 0; do
         ;;
         -d|--remove-docker)
         disable_docker
+        purge_docker
         shift
         continue
         #exit 0
