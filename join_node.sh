@@ -60,9 +60,6 @@ case $choose in
     2) myrole="backend"
        get_join_command $myrole
        ;;
-    3) myrole="backend"
-       get_join_command $myrole
-       ;;
     *) echo -e "${RED}Wrong option..Exit${WHITE}";
        exit 1;;
 esac 
