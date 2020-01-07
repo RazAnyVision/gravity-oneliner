@@ -111,6 +111,10 @@ function showhelp {
    echo "  [-p|--product-name] Product name to install"
    echo "  [-v|--product-version] Product version to install (default: ${PRODUCT_VERSION})"
    echo "  [--product-repo-version] Product repo version to install (default: ${PRODUCT_VERSION})"
+   echo "  [--data-name] Product name to install (default: ${K8S_DATA_NAME})"
+   echo "  [--data-version] Product version to install (default: ${K8S_DATA_VERSION})"   
+   echo "  [--init-name] Product name to install (default: ${K8S_INIT_NAME})"
+   echo "  [--init-version] Product version to install (default: ${K8S_INIT_VERSION})"      
    echo "  [--download-only] Download all the required installation files (to ${BASEDIR})"
    echo "  [--force-download] Allow overwrite scripts if exist"
    echo "  [--os-package] Select OS package to download, Force download only [redhat|ubuntu] (default: machine OS)"
@@ -120,6 +124,8 @@ function showhelp {
    echo "  [--add-migration-chart] Auto deploy migration after installation (from Rancher catalog)"
    echo "  [--k8s-base-repo-version] Kubernetes/Gravity base version (default: ${K8S_BASE_VERSION})"
    echo "  [--k8s-infra-repo-version] Infrastructure layer version (default: ${K8S_INFRA_VERSION})"
+   echo "  [--k8s-data-repo-version] Infrastructure layer version (default: ${K8S_DATA_REPO_VERSION})"
+   echo "  [--k8s-init-repo-version] Infrastructure layer version (default: ${K8S_INIT_REPO_VERSION})"
    echo "  [--skip-cidr-check] Force install without checking CIDR overlap"
    # commented below - feature disabled until we can send those params to the preflight.sh script as well
    # echo "  [--pod-network-cidr] Config pod network CIDR [Default: ${POD_NETWORK_CIDR}]"
@@ -223,6 +229,30 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --data-name)
+        shift
+            K8S_DATA_NAME=${1:-$K8S_DATA_NAME}
+        shift
+        continue
+        ;;
+        --data-version)
+        shift
+            K8S_DATA_VERSION=${1:-$K8S_DATA_VERSION}
+        shift
+        continue
+        ;;
+        --init-name)
+        shift
+            K8S_INIT_NAME=${1:-$K8S_INIT_NAME}
+        shift
+        continue
+        ;;
+        --init-version)
+        shift
+            K8S_INIT_VERSION=${1:-$K8S_INIT_VERSION}
+        shift
+        continue
+        ;;
         --auto-install-product)
             INSTALL_PRODUCT="true"
         shift
@@ -300,6 +330,20 @@ while test $# -gt 0; do
         shift
         continue
         ;;
+        --k8s-data-repo-version)
+        shift
+            K8S_DATA_REPO_VERSION=${1:-$K8S_DATA_REPO_VERSION}
+            K8S_DATA_REPO_FLAG="true"
+        shift
+        continue
+        ;;
+        --k8s-init-repo-version)
+        shift
+            K8S_INIT_REPO_VERSION=${1:-$K8S_INIT_REPO_VERSION}
+            K8S_INIT_REPO_FLAG="true"
+        shift
+        continue
+        ;;
         --product-repo-version)
         shift
             PRODUCT_REPO_VERSION=${1:-$PRODUCT_REPO_VERSION}
@@ -359,6 +403,8 @@ done
 # change repo version in case repo version flag exist
 [ -z ${K8S_BASE_REPO_FLAG} ] && K8S_BASE_REPO_VERSION="${K8S_BASE_VERSION}"
 [ -z ${K8S_INFRA_REPO_FLAG} ] && K8S_INFRA_REPO_VERSION="${K8S_INFRA_VERSION}"
+[ -z ${K8S_DATA_REPO_FLAG} ] && K8S_DATA_REPO_VERSION="${K8S_DATA_VERSION}"
+[ -z ${K8S_INIT_REPO_FLAG} ] && K8S_INIT_REPO_VERSION="${K8S_INIT_VERSION}"
 [ -z ${PRODUCT_REPO_FLAG} ] && PRODUCT_REPO_VERSION="${PRODUCT_VERSION}"
 [ -z ${NVIDIA_DRIVER_REPO_FLAG} ] && NVIDIA_DRIVER_REPO_VERSION="${NVIDIA_DRIVER_PACKAGE_VERSION}"
 
@@ -951,6 +997,7 @@ function node_labels() {
     backend=true \
     frontend=true \
     monitor=true \
+    memsql=true \
     nvidia-driver=true || true
 }
 
