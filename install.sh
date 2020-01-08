@@ -992,7 +992,11 @@ function install_gravity_bundle() {
 
 function node_labels() {
   # add node labels to the first master
-  kubectl label nodes $(kubectl get node -l "node-role.kubernetes.io/master=master" -o 'jsonpath={.items[0].status.addresses[?(@.type=="Hostname")].address}') \
+  FIRST_MASTER=$(kubectl get node -l "node-role.kubernetes.io/master=master" -o 'jsonpath={.items[0].status.addresses[?(@.type=="Hostname")].address}' || true)
+  if [ -z $FIRST_MASTER ]; then
+    FIRST_MASTER=$(kubectl get node -l "node-role.kubernetes.io/master=true" -o 'jsonpath={.items[0].status.addresses[?(@.type=="Hostname")].address}' || true)
+  fi
+  kubectl label nodes ${FIRST_MASTER} \
     edge=true \
     backend=true \
     frontend=true \
@@ -1171,6 +1175,8 @@ if [[ "${INSTALL_METHOD}" == "online" ]]; then
       nvidia_drivers_installation
     fi
   fi
+  install_data_app
+  install_init_app
   install_product_app
 else
   is_kubectl_exists
@@ -1206,6 +1212,8 @@ else
       nvidia_drivers_installation
     fi
   fi
+  install_data_app
+  install_init_app
   install_product_app
 fi
 
